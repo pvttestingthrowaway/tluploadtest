@@ -18,6 +18,15 @@ translator = googletrans.Translator()
 with open(langNamesPath, "r") as fp:
     languages_translated = json.load(fp)
 
+default_settings = {
+    "voice_recognition_type": 0,
+    "model_size": 2,
+    "transcription_storage": 1,
+    "deepl_api_key": "",
+    "dynamic_loudness": False,
+    "ui_language": "System Language - syslang"
+}
+
 #Let's ensure that the tlCache exists and that we have a tlCache object.
 if os.path.exists(tlCachePath):
     with open(tlCachePath, "r") as fp:
@@ -27,8 +36,20 @@ else:
     with open(tlCachePath, "w") as fp:
         json.dump(tlCache, fp, indent=4, ensure_ascii=False)
 
+def get_settings():
+    if os.path.exists("config.json"):
+        with open("config.json", "r") as fp:
+            settings = json.load(fp)
+    else:
+        settings = default_settings
+        with open("config.json", "w") as fp:
+            json.dump(settings, fp, indent=4)
+    return settings
+
 def get_code_from_langstring(langString):
-    if langString.lower() == "system language":
+    langCode = langString.split(" - ")[1]
+
+    if langCode.lower() == "syslang":
         if os.name == "nt":
             # windows-specific
             import ctypes
@@ -41,11 +62,10 @@ def get_code_from_langstring(langString):
             # macos or linux
             import locale
             langCode = locale.getdefaultlocale()[0].split("_")[0]
-    else:
-        langCode = langString.split(" - ")[1]
+
     return langCode
 
-def get_googletrans_native_langnames():
+def get_googletrans_native_langnames(currentLang):
     langList = list()
     langCodesAdded = False
     for code, name in googletrans.LANGUAGES.items():
@@ -90,15 +110,17 @@ def get_googletrans_native_langnames():
             sorted_langList.pop(index)
             sorted_langList.insert(0, lang)
             break
-    sorted_langList.insert(0,"System default")
+    sysLangString = f"{translate_ui_text('System language',currentLang, cacheSkip=True)} - syslang"
+    sorted_langList.insert(0, sysLangString)
     return sorted_langList
 
 def tl_cache_prep(target_language):
-    print(f"Preparing tl cache for {target_language}")
+    langCode = get_code_from_langstring(target_language)
+    print(f"Preparing tl cache for {langCode}")
     #Bulk-translate all strings at once.
 
     # Extract all the keys (UI text to be translated)
-    untranslated = [ui_text for ui_text in tlCache.keys() if target_language not in tlCache[ui_text]]
+    untranslated = [ui_text for ui_text in tlCache.keys() if langCode not in tlCache[ui_text]]
     if "Language Names" in untranslated:
         untranslated.remove("Language Names")
     if len(untranslated) == 0:
@@ -126,7 +148,7 @@ def tl_cache_prep(target_language):
         chunk_translations = None
         for i in range(20):
             try:
-                chunk_translations = translator.translate(chunk, dest=get_code_from_langstring(target_language)).text.split('\n')
+                chunk_translations = translator.translate(chunk, dest=langCode).text.split('\n')
                 break
             except (TypeError, httpcore.TimeoutException):
                 pass
@@ -137,8 +159,8 @@ def tl_cache_prep(target_language):
 
     # Update the JSON data with the translations
     for ui_text, translated_text in zip(untranslated, translations):
-        if target_language not in tlCache[ui_text]:
-            tlCache[ui_text][target_language] = translated_text
+        if langCode not in tlCache[ui_text]:
+            tlCache[ui_text][langCode] = translated_text
 
     # Save the updated data back to the JSON file
     with open(tlCachePath, 'w') as f:
@@ -148,6 +170,7 @@ def translate_ui_text(text, language, cacheKey=None, cacheSkip=False):
     #Language is in the form "NativeName - LangCode"
     if text is None or text == "":
         return text
+
     langCode = get_code_from_langstring(language)
 
     cacheUpdated = False
@@ -158,7 +181,7 @@ def translate_ui_text(text, language, cacheKey=None, cacheSkip=False):
         tlCache[cacheKey] = dict()
         cacheUpdated = True
 
-    if language not in tlCache[cacheKey] or cacheSkip:
+    if langCode not in tlCache[cacheKey] or cacheSkip:
         cacheUpdated = True
 
         counter = 0
@@ -184,9 +207,9 @@ def translate_ui_text(text, language, cacheKey=None, cacheSkip=False):
             if langCode not in ['ja', 'zh-cn', 'zh-tw']:  # Add more if needed
                 translatedText = translatedText[0].upper() + translatedText[1:]
             if not cacheSkip:
-                tlCache[cacheKey][language] = translatedText
+                tlCache[cacheKey][langCode] = translatedText
     else:
-        translatedText = tlCache[cacheKey][language]
+        translatedText = tlCache[cacheKey][langCode]
 
     if cacheUpdated and not cacheSkip:
         with open(tlCachePath, "w") as fp:
@@ -309,6 +332,8 @@ def get_supported_languages(user:ElevenLabsUser|None):
 
 def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocalizeIn:str):
     langList = get_supported_languages(user)
+    if len(langList) == 0:
+        return langList
     langPairs = [(language.split(" - ")[0], language.split(" - ")[1]) for language in langList]
 
     # Join language names with \n to prepare for translation
@@ -321,7 +346,7 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
 
     # Split translated string back into individual language names and capitalize them if necessary
     langNamesTL = langStringTL.split("\n")
-    if langCode not in ['ja', 'zh-cn', 'zh-tw']:  # Add more if needed
+    if langCode not in ['ja', 'zh-cn', 'zh-tw'] and len(langCode) > 1:  # Add more if needed
         langNamesTL = [lang[0].upper() + lang[1:] for lang in langNamesTL]
 
     print(langNamesTL)

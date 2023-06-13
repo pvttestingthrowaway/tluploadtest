@@ -28,7 +28,7 @@ class Recognizer:
     def main_loop(self):
         while True:
             try:
-                audioData = self.audioQueue.get(timeout=30)
+                audioData = self.audioQueue.get(timeout=5)
                 audio = audioData["audio"]
                 resultQueue = audioData["queue"]
             except queue.Empty:

@@ -51,7 +51,7 @@ class Translator:
     def main_loop(self, textReadySignal:pyqtSignal):
         while True:
             try:
-                tlData = self.tlQueue.get(timeout=30)
+                tlData = self.tlQueue.get(timeout=5)
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Translator exiting...")
@@ -59,6 +59,8 @@ class Translator:
                 continue
 
             textToTL = tlData["text"]
+            if textToTL == "":
+                continue
             print(f"Translating {tlData['text']} from {tlData['lang']}")
             sourceLang = tlData["lang"].lower()
             resultText = None
@@ -84,7 +86,9 @@ class Translator:
                     except TypeError:
                         counter += 1
 
-
-            textReadySignal.emit(textToTL, resultText.text)
+            if textToTL == ".":
+                textReadySignal.emit("Noise is being detected as speech. Please raise loudness threshold.","Noise is being detected as speech. Please raise loudness threshold.")
+            else:
+                textReadySignal.emit(textToTL, resultText.text)
             print(f"translatedText: {resultText.text}")
             self.ttsQueue.put(resultText.text)

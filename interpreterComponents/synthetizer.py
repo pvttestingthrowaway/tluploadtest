@@ -12,6 +12,7 @@ class Synthesizer:
         self.readyForPlaybackEvent = threading.Event()
         self.readyForPlaybackEvent.set()
         self.user = elevenlabslib.ElevenLabsUser(apiKey)
+        self.ttsVoice = None
 
         if isPlaceHolder:
             self.placeHolderVoice = self.user.get_voice_by_ID(voiceID)
@@ -35,7 +36,7 @@ class Synthesizer:
         threading.Thread(target=self.waitForPlaybackReady).start()  # Starts the thread that handles playback ordering.
         while True:
             try:
-                prompt = self.ttsQueue.get(timeout=30)
+                prompt = self.ttsQueue.get(timeout=5)
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Synthetizer main loop exiting...")
@@ -70,7 +71,7 @@ class Synthesizer:
             self.readyForPlaybackEvent.clear()
             while True:
                 try:
-                    nextEvent = self.eventQueue.get(timeout=30)
+                    nextEvent = self.eventQueue.get(timeout=5)
                 except queue.Empty:
                     if self.interruptEvent.is_set():
                         print("Synthetizer playback loop exiting...")

@@ -42,7 +42,7 @@ class Detector:
             threading.Thread(target=wRecognizer.main_loop).start()
 
         self.resultQueue = tlQueue
-        self.cloneQueue = cloneQueue
+        self.cloneQueue:queue.Queue = cloneQueue
 
 
     def main_loop(self):
@@ -53,16 +53,16 @@ class Detector:
             while True:
                 self.isRunning.wait()  #Wait until we're running. This ensures that we don't accidentally record while muted.
                 print("Detecting audio...")
+                if self.interruptEvent.is_set():
+                    print("Detector exiting...")
+                    break
                 try:
                     audio:sr.AudioData = self.srRecognizer.listen(source, timeout=30)
                 except sr.WaitTimeoutError:
                     print("Audio rec interrupted")
-                    if self.interruptEvent.is_set():
-                        print("Detector exiting...")
-                        break
                     continue
                 if self.cloneQueue is not None:
-                    self.cloneQueue.append(audio)
+                    self.cloneQueue.put(audio)
 
                 print(f"Audio detected on {self.srMic.device_index}.")
                 audioData = {"audio":audio,"queue":self.resultQueue}

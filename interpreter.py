@@ -17,17 +17,19 @@ class Interpreter(QObject):
 
     def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, createNewVoice: bool=False):
         super().__init__()
+        self.threads = None
         self._paused = threading.Event()
         self.ttsQueue = queue.Queue()
         self.tlQueue = queue.Queue()
         self.cloneQueue = None
-        useLocal = settings["voice_recognition_type"] == "Local"
+        useLocal = settings["voice_recognition_type"] == 0
         openAIAPIKey = keyring.get_password("polyecho", "openai_api_key")
         deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key")
         audoApiKey = keyring.get_password("polyecho", "audo_api_key")
 
-        srSettings = (settings["loudness_threshold"], settings["dynamic_loudness_threshold"], settings["pause_time_(in_seconds)"])
-        modelSize = settings["model_size"]
+        srSettings = (settings["loudness_threshold"], settings["dynamic_loudness"], settings["pause_time"])
+        modelSizes = ["base", "small", "medium", "large-v2"]
+        modelSize = modelSizes[settings["model_size"]]
         xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
 
         placeHolderVoiceID = settings["placeholder_ai_voice"]
@@ -54,11 +56,16 @@ class Interpreter(QObject):
             self.interruptEvents.append(self.cloner.interruptEvent)
 
     def begin_interpretation(self):
-        threading.Thread(target=self.detector.main_loop).start()
-        threading.Thread(target=self.translator.main_loop, args=(self.textReadySignal,)).start()
-        threading.Thread(target=self.synthetizer.main_loop).start()
+        self.threads = list()
+        self.threads.append(threading.Thread(target=self.detector.main_loop))
+        self.threads.append(threading.Thread(target=self.translator.main_loop, args=(self.textReadySignal,)))
+        self.threads.append(threading.Thread(target=self.synthetizer.main_loop))
+
         if self.cloneQueue is not None:
-            threading.Thread(target=self.wait_for_clone, args=(self.cloneProgressSignal,)).start()
+            self.threads.append(threading.Thread(target=self.wait_for_clone))
+
+        for thread in self.threads:
+            thread.start()
 
         print("Intepretation started.")
 
@@ -94,6 +101,9 @@ class Interpreter(QObject):
     def stop_interpretation(self):
         for event in self.interruptEvents:
             event.set()
+
+        for thread in self.threads:
+            thread.join()
     @property
     def paused(self):
         return self._paused.is_set()
