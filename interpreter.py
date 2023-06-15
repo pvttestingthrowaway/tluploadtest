@@ -15,7 +15,7 @@ class Interpreter(QObject):
     textReadySignal = pyqtSignal(str, str)
     cloneProgressSignal = pyqtSignal(str)
 
-    def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, createNewVoice: bool=False):
+    def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, srSettings:tuple,createNewVoice: bool=False):
         super().__init__()
         self.threads = None
         self._paused = threading.Event()
@@ -27,7 +27,6 @@ class Interpreter(QObject):
         deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key")
         audoApiKey = keyring.get_password("polyecho", "audo_api_key")
 
-        srSettings = (settings["loudness_threshold"], settings["dynamic_loudness"], settings["pause_time"])
         modelSizes = ["base", "small", "medium", "large-v2"]
         modelSize = modelSizes[settings["model_size"]]
         xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")

@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import os
@@ -5,6 +6,7 @@ import platform
 import shutil
 import subprocess
 import threading
+import time
 from typing import Optional, TextIO
 from zipfile import ZipFile
 
@@ -18,8 +20,9 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget, QSizePolicy, QMessageBox
 
 from utils import helper
-from configWindow import LabeledInput, ConfigDialog, ToggleButton, default_settings, CenteredLabel, LocalizedCenteredLabel, settings
-from utils.helper import get_supported_languages, get_supported_languages_localized
+from utils.helper import settings
+
+from configWindow import LabeledInput, ConfigDialog, ToggleButton, CenteredLabel, LocalizedCenteredLabel
 from interpreter import Interpreter
 
 greenColor = "green"
@@ -29,22 +32,27 @@ redColor = "red"
 class ResizableCircularButton(QPushButton):
     def __init__(self, bgColor, icon=None, *args, **kwargs):
         super(ResizableCircularButton, self).__init__(*args, **kwargs)
-        self.bgColor = bgColor
-        self.previousColor = bgColor
+        self.bgColor = None
+        self.previousColor = None
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         sizePolicy.setHeightForWidth(True)
         self.setSizePolicy(sizePolicy)
         if icon is not None:
             self.setIcon(icon)
 
+        self.setColor(bgColor)
+        self.bgColor = bgColor
+        self.previousColor = bgColor
+
     def heightForWidth(self, width):
         return width
 
     def setColor(self, bgColor):
-        self.previousColor = self.bgColor
-        self.bgColor = bgColor
+        if self.bgColor != bgColor: #If it's the same, don't change anything.
+            self.previousColor = self.bgColor
+            self.bgColor = bgColor
         size = min(self.width(), self.height())
-        self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor};")
+        self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor}; border :5px solid black;")
 
     def getColor(self):
         return self.bgColor
@@ -86,13 +94,14 @@ class MainWindow(QtWidgets.QDialog):
             raise RuntimeError("Invalid state.")
         self.inactiveLayout.setVisible(state=="inactive")
         self.activeLayout.setVisible(state=="active")
-    def reset_label_texts(self):
+    def reset_active_layout(self):
         self.activeLabels["me"]["recognized"].setText("MyText - Recognized")
         self.activeLabels["me"]["translated"].setText("MyText - Translated")
         self.activeLabels["them"]["recognized"].setText("TheirText - Recognized")
         self.activeLabels["them"]["translated"].setText("TheirText - Translated")
 
         self.activeLabels["cloneProgress"].setText("Cloning progress...")
+        self.micButton.setColor(greenColor)
 
     def init_active_state(self):
         active_layout = QGridLayout()
@@ -107,10 +116,12 @@ class MainWindow(QtWidgets.QDialog):
         self.activeLabels["them"]["translated"] = CenteredLabel("TheirText - Translated")
 
         self.activeLabels["cloneProgress"] = LocalizedCenteredLabel("Cloning progress...")
-        self.reset_label_texts()
+
         # Create circular buttons with icons
         self.micButton = ResizableCircularButton(greenColor, QIcon('resources/microphone.png'))
         self.speakerButton = ResizableCircularButton(yellowColor, QIcon('resources/speaker.png'))
+
+        self.reset_active_layout()
 
         # Create rectangular button
         self.stop_button = QPushButton(helper.translate_ui_text("Stop", settings["ui_language"]))
@@ -144,14 +155,14 @@ class MainWindow(QtWidgets.QDialog):
         if apiKey is not None:
             try:
                 self.user:elevenlabslib.ElevenLabsUser = elevenlabslib.ElevenLabsUser(apiKey)
-            except ValueError:
+            except (ValueError, AttributeError):
                 pass
 
         # First row
         self.your_output_lang = LabeledInput(
             "Your output language",
             configKey = "your_output_language",
-            data=get_supported_languages_localized(self.user, settings["ui_language"]),
+            data=helper.get_supported_languages_localized(self.user, settings["ui_language"]),
             fixedComboBoxSize=None
         )
         inactive_layout.addWidget(self.your_output_lang, 0, 0)
@@ -159,7 +170,7 @@ class MainWindow(QtWidgets.QDialog):
         self.their_output_lang = LabeledInput(
             "Their output language",
             configKey="their_output_language",
-            data = get_supported_languages_localized(self.user, settings["ui_language"]),
+            data = helper.get_supported_languages_localized(self.user, settings["ui_language"]),
             fixedComboBoxSize=None
         )
         inactive_layout.addWidget(self.their_output_lang, 0, 2)
@@ -267,14 +278,10 @@ class MainWindow(QtWidgets.QDialog):
                 if newVoiceAmount == currentVoiceAmount:
                     return
 
-
-        settings = helper.get_settings()
-
+        #Update settings
         settings["your_output_language"] = self.your_output_lang.combo_box.currentText()
         settings["their_output_language"] = self.their_output_lang.combo_box.currentText()
-        with open("config.json", "w") as fp:
-            json.dump(settings, fp, indent=4)
-
+        helper.dump_settings()
 
         #Check audio device validity
         inputInfo = None
@@ -321,23 +328,28 @@ class MainWindow(QtWidgets.QDialog):
                 break
 
         # audioInput:str, audioOutput:str, settings:dict, targetLang:str, voiceIDOrName:str
-        self.myInterpreter = Interpreter(settings["audio_input_device"], myVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"])
+        mysrSettings = (settings["my_loudness_threshold"], False, settings["my_pause_time"])    #Removed dynamic_loudness
+        theirsrSettings = (settings["their_loudness_threshold"], False, settings["their_pause_time"])  # Removed dynamic_loudness
+
+        self.myInterpreter = Interpreter(settings["audio_input_device"], myVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=mysrSettings)
 
         # TODO: remove this because it's only for testing
         theirVirtualInput = "Microphone (USB-MIC) - 5"
         #TODO: TEST THIS.
         if cloneNew:
-            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(), createNewVoice=True)
+            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),createNewVoice=True, srSettings=theirsrSettings)
         else:
-            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.voicePicker.combo_box.currentText())
+            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.voicePicker.combo_box.currentText(), )
 
         self.set_state("active")
-        self.reset_label_texts()
+        self.reset_active_layout()
 
         if cloneNew:
+            self.activeLabels["cloneProgress"].setVisible(True)
             self.speakerButton.setColor(yellowColor)
             self.theirInterpreter.cloneProgressSignal.connect(lambda cloneProgress: self.setCloneProgress(cloneProgress))
         else:
+            self.activeLabels["cloneProgress"].setVisible(False)
             self.speakerButton.setColor(greenColor)
 
         self.myInterpreter.textReadySignal.connect(lambda recognizedText, translatedText: self.setSpeechLabelsText("me", recognizedText, translatedText))
@@ -433,18 +445,27 @@ class MainWindow(QtWidgets.QDialog):
         currentVoiceType = self.voiceType.get_value()
         currentPickedVoice = self.voicePicker.get_value()
         currentVoiceName = self.nameInput.get_value()
-        oldSettings = helper.get_settings()
+        oldSettings = copy.deepcopy(settings)
         oldXIKey = keyring.get_password("polyecho", "elevenlabs_api_key")
 
         QTimer.singleShot(1, lambda: (self.configDialog.activateWindow(), self.configDialog.raise_()))
         self.configDialog.exec()
 
-        newSettings = helper.get_settings()
         newXIKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        if oldSettings["ui_language"] != newSettings["ui_language"] or oldXIKey != newXIKey:
+        if oldSettings["ui_language"] != settings["ui_language"] or oldXIKey != newXIKey:
             self.configDialog = ConfigDialog()
-            self.inactiveLayout = self.init_inactive_state()
-            self.activeLayout = self.init_active_state()
+
+            self.layout.removeWidget(self.inactiveLayout)
+            self.layout.removeWidget(self.activeLayout)
+
+            self.inactiveLayout = QWidget()
+            self.inactiveLayout.setLayout(self.init_inactive_state())
+            self.activeLayout = QWidget()
+            self.activeLayout.setLayout(self.init_active_state())
+
+            self.layout.addWidget(self.activeLayout)
+            self.layout.addWidget(self.inactiveLayout)
+
             self.set_state("inactive")
             if currentVoiceType == 0:
                 self.voiceType.button_clicked(currentVoiceType, self.on_new)
@@ -550,20 +571,17 @@ def main():
 
     #TODO: First-time setup if config doesn't exist.
     dialog = MainWindow()
-    dialog.show()
+    dialog.show()               #It crashes in debug mode with an access violation unless I put a breakpoint here. What the fuck?
     dialog.activateWindow()
     dialog.raise_()
 
 
     app.exec()
 
-    settings = helper.get_settings()
-
     try:
         settings["your_output_language"] = dialog.your_output_lang.combo_box.currentText()
         settings["their_output_language"] = dialog.their_output_lang.combo_box.currentText()
-        with open("config.json", "w") as fp:
-            json.dump(settings, fp, indent=4)
+        helper.dump_settings()
     except RuntimeError:
         pass
 

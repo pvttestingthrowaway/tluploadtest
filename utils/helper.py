@@ -22,7 +22,6 @@ default_settings = {
     "voice_recognition_type": 0,
     "model_size": 2,
     "transcription_storage": 1,
-    "deepl_api_key": "",
     "dynamic_loudness": False,
     "ui_language": "System Language - syslang"
 }
@@ -35,8 +34,11 @@ else:
     tlCache = dict()
     with open(tlCachePath, "w") as fp:
         json.dump(tlCache, fp, indent=4, ensure_ascii=False)
+settings = dict()
 
-def get_settings():
+
+def reload_settings():
+    global settings
     if os.path.exists("config.json"):
         with open("config.json", "r") as fp:
             settings = json.load(fp)
@@ -44,7 +46,12 @@ def get_settings():
         settings = default_settings
         with open("config.json", "w") as fp:
             json.dump(settings, fp, indent=4)
-    return settings
+
+def dump_settings():
+    with open("config.json", "w") as fp:
+        json.dump(settings, fp, indent=4)
+
+reload_settings()
 
 def get_code_from_langstring(langString):
     langCode = langString.split(" - ")[1]
@@ -136,7 +143,7 @@ def tl_cache_prep(target_language):
             chunks.append(chunk)
             chunk = ui_text
         else:
-            chunk = chunk + '\n' + ui_text if chunk else ui_text
+            chunk = chunk + '|||' + ui_text if chunk else ui_text
         # Don't forget the last chunk
     if chunk:
         chunks.append(chunk)
@@ -148,7 +155,13 @@ def tl_cache_prep(target_language):
         chunk_translations = None
         for i in range(20):
             try:
-                chunk_translations = translator.translate(chunk, dest=langCode).text.split('\n')
+                chunk_translations:list = translator.translate(chunk, dest=langCode).text.split('|')
+                #Remove all the empty items
+                while True:
+                    try:
+                        chunk_translations.remove("")
+                    except ValueError:
+                        break
                 break
             except (TypeError, httpcore.TimeoutException):
                 pass
@@ -339,7 +352,6 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
     # Join language names with \n to prepare for translation
     langString = "\n".join(langName for langName, langCode in langPairs)
 
-    print(langString)
 
     langStringTL = translate_ui_text(langString, languageToLocalizeIn, cacheKey="Language Names")
     langCode = languageToLocalizeIn.split(" - ")[1]
@@ -348,8 +360,6 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
     langNamesTL = langStringTL.split("\n")
     if langCode not in ['ja', 'zh-cn', 'zh-tw'] and len(langCode) > 1:  # Add more if needed
         langNamesTL = [lang[0].upper() + lang[1:] for lang in langNamesTL]
-
-    print(langNamesTL)
 
     # Combine translated language names with language codes
     langList = [f"{langName} - {langCode}" for (langName, langCode) in zip(langNamesTL, (langCode for _, langCode in langPairs))]
