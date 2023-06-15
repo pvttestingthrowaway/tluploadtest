@@ -1,3 +1,5 @@
+import copy
+import os
 import threading
 
 import deepl as deepl
@@ -7,17 +9,17 @@ import openai
 import websocket
 from audoai.noise_removal import NoiseRemovalClient
 
-from utils.helper import *
+from utils import helper
+from utils.helper import settings
 
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtCore import QPoint, QRect, Qt
 from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import QStyle, QStyleOptionSlider, QSlider, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFileDialog, QLineEdit, QCheckBox
 
-settings = get_settings()
 class LocalizedCheckbox(QCheckBox):
     def __init__(self, configKey, text=None, cacheSkip=False):
-        super(LocalizedCheckbox, self).__init__(translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
+        super(LocalizedCheckbox, self).__init__(helper.translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
         self.configKey = configKey
         if configKey not in settings:
@@ -25,7 +27,7 @@ class LocalizedCheckbox(QCheckBox):
         self.setChecked(settings[configKey])
 
     def setText(self, a0: str) -> None:
-        super(LocalizedCheckbox, self).setText(translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
+        super(LocalizedCheckbox, self).setText(helper.translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
 
     def get_value(self):
         return self.isChecked()
@@ -33,11 +35,11 @@ class LocalizedCheckbox(QCheckBox):
 
 class LocalizedLabel(QLabel):
     def __init__(self, text=None, cacheSkip=False):
-        super(LocalizedLabel, self).__init__(translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
+        super(LocalizedLabel, self).__init__(helper.translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
 
     def setText(self, a0: str) -> None:
-        super(LocalizedLabel, self).setText(translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
+        super(LocalizedLabel, self).setText(helper.translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
 
 class LocalizedCenteredLabel(LocalizedLabel):
     def __init__(self, text=None, cacheSkip=False):
@@ -65,7 +67,7 @@ class InfoButton(QtWidgets.QPushButton):
             self.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DirHomeIcon))
         else:
             self.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation))
-            self.clicked.connect(lambda: self.show_info(translate_ui_text(info, settings["ui_language"])))
+            self.clicked.connect(lambda: self.show_info(helper.translate_ui_text(info, settings["ui_language"])))
 
     def show_info(self, info):
         msgBox = QtWidgets.QMessageBox()
@@ -96,7 +98,7 @@ class LabeledInput(QtWidgets.QWidget):
             if localizeComboBox:
                 data_translated = list()
                 for item in data:
-                    data_translated.append(translate_ui_text(item,settings["ui_language"]))
+                    data_translated.append(helper.translate_ui_text(item,settings["ui_language"]))
                 self.combo_box.addItems(data_translated)
             else:
                 self.combo_box.addItems(data)
@@ -149,7 +151,7 @@ class ToggleButton(QtWidgets.QWidget):
         super().__init__()
 
         for index, text in enumerate(button_texts):
-            button_texts[index] = translate_ui_text(text, settings["ui_language"])
+            button_texts[index] = helper.translate_ui_text(text, settings["ui_language"])
 
         self.layout = QtWidgets.QGridLayout(self)
         self.selected_button = 0  # add an instance variable to track selected button
@@ -449,25 +451,41 @@ class SpeechRecWidget(QtWidgets.QWidget):
 
         self.layout = QtWidgets.QGridLayout(self)
 
-        for i in range(3):
-            self.layout.setColumnStretch(i, 1)
-
-        self.energyThreshold = LabeledInput(
-            "Loudness threshold",
-            configKey="loudness_threshold",
+        self.myEnergyThreshold = LabeledInput(
+            "My loudness threshold",
+            configKey="my_loudness_threshold",
             data="250"
         )
-        self.layout.addWidget(self.energyThreshold, 0, 0)
+        self.layout.addWidget(self.myEnergyThreshold, 0, 0)
 
-        self.dynamicLoudness = LocalizedCheckbox(configKey="dynamic_loudness",text="Dynamic loudness threshold")
-        self.layout.addWidget(self.dynamicLoudness, 0, 1)
+        #self.dynamicLoudness = LocalizedCheckbox(configKey="dynamic_loudness",text="Dynamic loudness threshold")
+        #self.layout.addWidget(self.dynamicLoudness, 0, 1)
 
-        self.pauseTime = LabeledInput(
-            "Pause time (in seconds)",
+        self.myPauseTime = LabeledInput(
+            "My pause time (in seconds)",
             data="0.5",
-            configKey="pause_time"
+            configKey="my_pause_time"
         )
-        self.layout.addWidget(self.pauseTime, 0, 2)
+        self.layout.addWidget(self.myPauseTime, 1, 0)
+
+
+
+        self.theirEnergyThreshold = LabeledInput(
+            "Their loudness threshold",
+            configKey="their_loudness_threshold",
+            data="250"
+        )
+        self.layout.addWidget(self.theirEnergyThreshold, 0, 2)
+
+        self.theirPauseTime = LabeledInput(
+            "Their pause time (in seconds)",
+            data="0.5",
+            configKey="their_pause_time"
+        )
+        self.layout.addWidget(self.theirPauseTime, 1, 2)
+
+        for i in range(3):
+            self.layout.setColumnStretch(i, 1)
 
     def on_change(self, text):
         print(f"Selected option: {text}")
@@ -488,7 +506,11 @@ class LocalWidgets(QtWidgets.QWidget):
 
         self.layout.addWidget(self.VRAMlabel, 2, 0, 1, 3)  # add to the bottom
 
+        #for i in range(3):
+            #self.layout.setColumnStretch(i, 1)
+
     def update_memory_label(self):
+        return
         import torch
         if not torch.cuda.is_available():
             labelText = "CUDA support missing. Either you don't have an NVIDIA GPU, or it's not compatible with CUDA 11.\nUsing local mode is not recommended."
@@ -581,14 +603,14 @@ class ConfigDialog(QtWidgets.QDialog):
         self.input_device = LabeledInput(
             "Audio input device",
             configKey = "audio_input_device",
-            data=get_list_of_portaudio_devices("input")
+            data=helper.get_list_of_portaudio_devices("input")
         )
         self.layout.addWidget(self.input_device, currentRow, 0)
 
         self.output_device = LabeledInput(
             "Audio output device",
             configKey="audio_output_device",
-            data = get_list_of_portaudio_devices("output")
+            data = helper.get_list_of_portaudio_devices("output")
         )
         self.layout.addWidget(self.output_device, currentRow, 2)
 
@@ -626,14 +648,14 @@ class ConfigDialog(QtWidgets.QDialog):
         self.your_ai_voice = LabeledInput(
             "Your AI Voice",
             configKey="your_ai_voice",
-            data=get_list_of_voices(user)
+            data=helper.get_list_of_voices(user)
         )
         self.layout.addWidget(self.your_ai_voice, currentRow, 0)
 
         self.placeholder_ai_voice = LabeledInput(
             "Placeholder AI Voice",
             configKey="placeholder_ai_voice",
-            data=get_list_of_voices(user)
+            data=helper.get_list_of_voices(user)
         )
         self.layout.addWidget(self.placeholder_ai_voice, currentRow, 2)
 
@@ -696,21 +718,21 @@ class ConfigDialog(QtWidgets.QDialog):
 
         currentRow += 1
 
-        self.layout.addWidget(self.whisperAPIWidgets, currentRow, 0, 3, 3)
-        self.layout.addWidget(self.localWhisperWidgets, currentRow, 0, 3, 3)
+        self.layout.addWidget(self.whisperAPIWidgets, currentRow, 0, 4, 3)
+        self.layout.addWidget(self.localWhisperWidgets, currentRow, 0, 4, 3)
 
-        currentRow += 3
+        currentRow += 4
 
         # Save and Cancel buttons
         buttonLayout = QtWidgets.QHBoxLayout()
 
-        saveButton = QtWidgets.QPushButton(translate_ui_text("Save", settings["ui_language"]))
+        saveButton = QtWidgets.QPushButton(helper.translate_ui_text("Save", settings["ui_language"]))
         saveButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
         saveButton.setMinimumSize(30, 25)  # adjust the size as per your need
         saveButton.clicked.connect(self.save_clicked)
         buttonLayout.addWidget(saveButton)
 
-        cancelButton = QtWidgets.QPushButton(translate_ui_text("Cancel", settings["ui_language"]))
+        cancelButton = QtWidgets.QPushButton(helper.translate_ui_text("Cancel", settings["ui_language"]))
         cancelButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
         cancelButton.setMinimumSize(30, 25)  # adjust the size as per your need
         cancelButton.clicked.connect(self.cancel_clicked)
@@ -724,7 +746,7 @@ class ConfigDialog(QtWidgets.QDialog):
         self.ui_language = LabeledInput(
             "GUI Language",
             configKey="ui_language",
-            data=get_googletrans_native_langnames(settings["ui_language"])
+            data=helper.get_googletrans_native_langnames(settings["ui_language"])
         )
 
         self.layout.addWidget(self.ui_language, currentRow, 0, 1, 1)
@@ -760,11 +782,12 @@ class ConfigDialog(QtWidgets.QDialog):
         languageChanged = False
         if settings["ui_language"] != self.ui_language.get_value():
             languageChanged = True
-            tlCachingThread = threading.Thread(target=tl_cache_prep, args=(self.ui_language.get_value(),))
+            tlCachingThread = threading.Thread(target=helper.tl_cache_prep, args=(self.ui_language.get_value(),))
             tlCachingThread.start()
 
         recognitionModeChanged = settings["voice_recognition_type"] != self.voice_recognition_type.get_value()
 
+        newSettings = copy.deepcopy(settings)
         for widget in self.iterate_widgets(self.layout):
             if hasattr(widget, 'configKey'):
                 #Read and save the config data.
@@ -778,7 +801,7 @@ class ConfigDialog(QtWidgets.QDialog):
                             user = elevenlabslib.ElevenLabsUser(value)
                             if not user.get_voice_clone_available():
                                 msgBox = QtWidgets.QMessageBox()
-                                msgBox.setText(translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available.", settings["ui_language"]))
+                                msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available.", settings["ui_language"]))
                                 msgBox.exec()
                         except ValueError:
                             errorMessage += "\nElevenLabs API error. API Key may be incorrect."
@@ -814,17 +837,17 @@ class ConfigDialog(QtWidgets.QDialog):
                         if value is None or not os.path.isdir(value):
                             errorMessage += "\nSpecified transcript save location is not a valid directory."
 
-                if configKey == "loudness_threshold":
+                if "_loudness_threshold" in configKey:
                     try:
                         int(value)
                     except ValueError:
-                        errorMessage += "\nLoudness threshold must be an integer!"
+                        errorMessage += f"\n{configKey.replace('_loudness_threshold','')} loudness threshold must be a number"
 
-                if configKey == "pause_time":
+                if "_pause_time" in configKey:
                     try:
                         float(value)
                     except ValueError:
-                        errorMessage += "\nPause time must be a number!"
+                        errorMessage += f"\n{configKey.replace('_pause_time','')} pause time must be a number"
 
                 useKeyring = hasattr(widget,"protected") and widget.protected
 
@@ -832,7 +855,7 @@ class ConfigDialog(QtWidgets.QDialog):
                     configKey = "keyring_"+configKey
 
                 if value is not None:
-                    settings[configKey] = value
+                    newSettings[configKey] = value
 
 
 
@@ -840,19 +863,21 @@ class ConfigDialog(QtWidgets.QDialog):
             tlCachingThread.join()
         if errorMessage != "":
             msgBox = QtWidgets.QMessageBox()
-            msgBox.setText(translate_ui_text(errorMessage, settings["ui_language"]))
+            msgBox.setText(helper.translate_ui_text(errorMessage, settings["ui_language"]))
             msgBox.exec()
+            return
         else:
             keysToPop = list()
-            for key, value in settings.items():
+            for key, value in newSettings.items():
                 if "keyring_" in key:
                     keyringKey = key[len("keyring_"):]
                     keyring.set_password("polyecho", keyringKey, value)
                     keysToPop.append(key)
             for key in keysToPop:
-                settings.pop(key)
-            with open("config.json", "w") as fp2:
-                json.dump(settings, fp2, indent=4)
+                newSettings.pop(key)
+            for key, value in newSettings.items():
+                settings[key] = value
+            helper.dump_settings()
             self.close()
 
     def cancel_clicked(self):
@@ -871,7 +896,7 @@ class ConfigDialog(QtWidgets.QDialog):
         #self.online_provider.setVisible(False)
         #self.azureWidgets.setVisible(False)
         self.whisperAPIWidgets.setVisible(False)
-        self.localWhisperWidgets.layout.addWidget(self.speechRecWidgets, 3, 0, 1, 3)
+        self.localWhisperWidgets.layout.addWidget(self.speechRecWidgets, 3, 0, 2, 3)
         self.adjustSize()
 
     def on_online(self):
@@ -892,7 +917,7 @@ class ConfigDialog(QtWidgets.QDialog):
     def on_whisper(self):
         #self.azureWidgets.setVisible(False)
         self.whisperAPIWidgets.setVisible(True)
-        self.whisperAPIWidgets.layout.addWidget(self.speechRecWidgets, 1, 0, 1, 3)
+        self.whisperAPIWidgets.layout.addWidget(self.speechRecWidgets, 3, 0, 2, 3)
         self.adjustSize()
 
 
