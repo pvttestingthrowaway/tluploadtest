@@ -31,6 +31,9 @@ class Recognizer:
                 audioData = self.audioQueue.get(timeout=5)
                 audio = audioData["audio"]
                 resultQueue = audioData["queue"]
+                cloneQueue = None
+                if "clonequeue" in audioData:
+                    cloneQueue = audioData["clonequeue"]
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
@@ -55,7 +58,11 @@ class Recognizer:
                 os.remove("temp.wav")
 
             print(f"recognizedText: {recognizedText}")
+            if recognizedText == "":
+                continue    #Had no actual text.
             resultQueue.put({
                     "text":recognizedText,
                     "lang":audioLanguage
                 })
+            if cloneQueue is not None:
+                cloneQueue.put(audio)

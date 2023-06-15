@@ -1,4 +1,5 @@
 import platform
+import queue
 import threading
 from typing import Optional
 
@@ -61,10 +62,12 @@ class Detector:
                 except sr.WaitTimeoutError:
                     print("Audio rec interrupted")
                     continue
-                if self.cloneQueue is not None:
-                    self.cloneQueue.put(audio)
 
                 print(f"Audio detected on {self.srMic.device_index}.")
                 audioData = {"audio":audio,"queue":self.resultQueue}
+
+                if self.cloneQueue is not None:
+                    audioData["clonequeue"] = self.cloneQueue
+
                 wRecognizer.audioQueue.put_nowait(audioData)
 
