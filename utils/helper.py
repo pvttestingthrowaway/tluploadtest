@@ -22,7 +22,6 @@ default_settings = {
     "voice_recognition_type": 0,
     "model_size": 2,
     "transcription_storage": 1,
-    "dynamic_loudness": False,
     "ui_language": "System Language - syslang"
 }
 
@@ -137,13 +136,14 @@ def tl_cache_prep(target_language):
     max_char_per_request = 2500
     chunks = []
     chunk = ""
+    marker = "\n|\n"
     for ui_text in untranslated:
         # If adding the next text would exceed the limit, save the current chunk
         if len(chunk) + len(ui_text) + 1 > max_char_per_request:
             chunks.append(chunk)
             chunk = ui_text
         else:
-            chunk = chunk + '|||' + ui_text if chunk else ui_text
+            chunk = chunk + marker + ui_text if chunk else ui_text
         # Don't forget the last chunk
     if chunk:
         chunks.append(chunk)
@@ -155,7 +155,7 @@ def tl_cache_prep(target_language):
         chunk_translations = None
         for i in range(20):
             try:
-                chunk_translations:list = translator.translate(chunk, dest=langCode).text.split('|')
+                chunk_translations:list = translator.translate(chunk, dest=langCode).text.split(marker)
                 #Remove all the empty items
                 while True:
                     try:
@@ -170,6 +170,11 @@ def tl_cache_prep(target_language):
             return
         translations.extend(chunk_translations)
 
+    #SANITY CHECK: Do we have the same amount of lines? If not, give up on the TL cache.
+    if len(untranslated) != len(translations):
+        return
+
+    print("")
     # Update the JSON data with the translations
     for ui_text, translated_text in zip(untranslated, translations):
         if langCode not in tlCache[ui_text]:
@@ -217,18 +222,22 @@ def translate_ui_text(text, language, cacheKey=None, cacheSkip=False):
             translatedText = text
             translatedText = translatedText[0].upper() + translatedText[1:]
         else:
-            if langCode not in ['ja', 'zh-cn', 'zh-tw']:  # Add more if needed
-                translatedText = translatedText[0].upper() + translatedText[1:]
             if not cacheSkip:
                 tlCache[cacheKey][langCode] = translatedText
     else:
         translatedText = tlCache[cacheKey][langCode]
 
+    if langCode not in ['ja', 'zh-cn', 'zh-tw']:  # Add more if needed
+        translatedText = translatedText[0].upper() + translatedText[1:]
+
+    translatedText = re.sub(r'deepl', 'DeepL', translatedText, flags=re.IGNORECASE)
+    translatedText = translatedText.strip()
+
     if cacheUpdated and not cacheSkip:
         with open(tlCachePath, "w") as fp:
             json.dump(tlCache, fp, indent=4, ensure_ascii=False)
 
-    translatedText = re.sub(r'deepl', 'DeepL', translatedText, flags=re.IGNORECASE)
+
     return translatedText
 
 def get_list_of_portaudio_devices(deviceType:str, includeVirtual=False) -> list[str]:
