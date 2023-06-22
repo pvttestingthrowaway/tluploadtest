@@ -1,5 +1,6 @@
 import copy
 import datetime
+import gc
 import json
 import os
 import platform
@@ -13,27 +14,29 @@ from zipfile import ZipFile
 import elevenlabslib
 import keyring
 import requests
+import srt
+
+import tracemalloc
 
 from PyQt6 import QtWidgets, QtGui
 from PyQt6.QtCore import QSize, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget, QSizePolicy, QMessageBox
+from PyQt6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget, QSizePolicy, QMessageBox, QLabel
+from srt import Subtitle
 
+import firstTimeSetup
 from utils import helper
 from utils.helper import settings
 
-from configWindow import LabeledInput, ConfigDialog, ToggleButton, CenteredLabel, LocalizedCenteredLabel
+from configWindow import LabeledInput, ConfigDialog, ToggleButton, CenteredLabel, LocalizedCenteredLabel, SignalEmitter
 from interpreter import Interpreter
 
-greenColor = "green"
-yellowColor = "yellow"
-redColor = "red"
-
-class ResizableCircularButton(QPushButton):
-    def __init__(self, bgColor, icon=None, *args, **kwargs):
-        super(ResizableCircularButton, self).__init__(*args, **kwargs)
+class AudioButton(QPushButton):
+    def __init__(self, bgColor, icon=None, assignedLabels:Optional[list]=None, *args, **kwargs):
+        super(AudioButton, self).__init__(*args, **kwargs)
         self.bgColor = None
         self.previousColor = None
+        self.assignedLabels = assignedLabels
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         sizePolicy.setHeightForWidth(True)
         self.setSizePolicy(sizePolicy)
@@ -65,16 +68,20 @@ class ResizableCircularButton(QPushButton):
         self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor}; border :5px solid black;")
         iconPadding = int(size/5)
         self.setIconSize(QSize(size - iconPadding, size - iconPadding))
+        if self.assignedLabels is not None:
+            for label in self.assignedLabels:
+                label.setMaximumWidth(self.width())
+
 
 
 class MainWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.transcript:Optional[TextIO] = None
+        self.transcript:Optional[dict] = None
         self.micButton = None
         self.speakerButton = None
         self.activeLabels = None
-        self.myInterpreter:Optional[Interpreter] = None
+        self.yourInterpreter:Optional[Interpreter] = None
         self.theirInterpreter:Optional[Interpreter] = None
         self.layout = QGridLayout(self)
 
@@ -88,6 +95,7 @@ class MainWindow(QtWidgets.QDialog):
         self.layout.addWidget(self.activeLayout)
         self.layout.addWidget(self.inactiveLayout)
         self.set_state("inactive")
+        self.setWindowTitle("PolyEcho")
 
     def set_state(self, state:str):
         if state != "active" and state != "inactive":
@@ -95,48 +103,56 @@ class MainWindow(QtWidgets.QDialog):
         self.inactiveLayout.setVisible(state=="inactive")
         self.activeLayout.setVisible(state=="active")
     def reset_active_layout(self):
-        self.activeLabels["me"]["recognized"].setText("MyText - Recognized")
-        self.activeLabels["me"]["translated"].setText("MyText - Translated")
-        self.activeLabels["them"]["recognized"].setText("TheirText - Recognized")
-        self.activeLabels["them"]["translated"].setText("TheirText - Translated")
+        self.activeLabels["you"]["recognized"].setText(helper.translate_ui_text("Your recognized text"))
+        self.activeLabels["you"]["translated"].setText(helper.translate_ui_text("Your translated text"))
+        self.activeLabels["them"]["recognized"].setText(helper.translate_ui_text("Their recognized text"))
+        self.activeLabels["them"]["translated"].setText(helper.translate_ui_text("Their translated text"))
 
         self.activeLabels["cloneProgress"].setText("Cloning progress...")
-        self.micButton.setColor(greenColor)
+        self.micButton.setColor(helper.colors_dict['green'])
 
     def init_active_state(self):
         active_layout = QGridLayout()
 
         # Create labels
         self.activeLabels = dict()
-        self.activeLabels["me"] = dict()
+        self.activeLabels["you"] = dict()
         self.activeLabels["them"] = dict()
-        self.activeLabels["me"]["recognized"] = CenteredLabel("MyText - Recognized")
-        self.activeLabels["me"]["translated"] = CenteredLabel("MyText - Translated")
-        self.activeLabels["them"]["recognized"] = CenteredLabel("TheirText - Recognized")
-        self.activeLabels["them"]["translated"] = CenteredLabel("TheirText - Translated")
+        self.activeLabels["you"]["recognized"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["you"]["translated"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["them"]["recognized"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["them"]["translated"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["cloneProgress"] = LocalizedCenteredLabel(cacheSkip=True, wordWrap=True)
 
-        self.activeLabels["cloneProgress"] = LocalizedCenteredLabel("Cloning progress...")
+
+        micLabels = [self.activeLabels["you"]["recognized"], self.activeLabels["you"]["translated"]]
+        speakerLabels = [self.activeLabels["them"]["recognized"], self.activeLabels["them"]["translated"], self.activeLabels["cloneProgress"]]
 
         # Create circular buttons with icons
-        self.micButton = ResizableCircularButton(greenColor, QIcon('resources/microphone.png'))
-        self.speakerButton = ResizableCircularButton(yellowColor, QIcon('resources/speaker.png'))
+        self.micButton = AudioButton(helper.colors_dict['green'], QIcon('resources/microphone.png'), assignedLabels=micLabels)
+        self.speakerButton = AudioButton(helper.colors_dict['yellow'], QIcon('resources/speaker.png'), assignedLabels=speakerLabels)
 
         self.reset_active_layout()
 
         # Create rectangular button
-        self.stop_button = QPushButton(helper.translate_ui_text("Stop", settings["ui_language"]))
+        self.stop_button = QPushButton(helper.translate_ui_text("Stop"))
+        self.stop_button.setStyleSheet(f"background-color: {helper.colors_dict['red']}")
         self.stop_button.clicked.connect(self.stop_clicked)
 
+
+
         # Set active layout
-        active_layout.addWidget(self.activeLabels["me"]["recognized"], 0, 0)
+        active_layout.addWidget(self.activeLabels["you"]["recognized"], 0, 0)
         active_layout.addWidget(self.activeLabels["them"]["recognized"], 0, 2)
         active_layout.addWidget(self.micButton, 1, 0)
 
         active_layout.addWidget(self.speakerButton, 1, 2)
-        active_layout.addWidget(self.activeLabels["me"]["translated"], 2, 0)
+        active_layout.addWidget(self.activeLabels["you"]["translated"], 2, 0)
         active_layout.addWidget(self.activeLabels["them"]["translated"], 2, 2)
         active_layout.addWidget(self.stop_button, 3, 1)
         active_layout.addWidget(self.activeLabels["cloneProgress"], 3, 2)
+
+
 
         for i in range(3):
             active_layout.setColumnStretch(i, 1)
@@ -163,7 +179,8 @@ class MainWindow(QtWidgets.QDialog):
             "Your output language",
             configKey = "your_output_language",
             data=helper.get_supported_languages_localized(self.user, settings["ui_language"]),
-            fixedComboBoxSize=None
+            fixedComboBoxSize=None,
+            info="The language you would like your TTS voice to speak in."
         )
         inactive_layout.addWidget(self.your_output_lang, 0, 0)
 
@@ -171,7 +188,8 @@ class MainWindow(QtWidgets.QDialog):
             "Their output language",
             configKey="their_output_language",
             data = helper.get_supported_languages_localized(self.user, settings["ui_language"]),
-            fixedComboBoxSize=None
+            fixedComboBoxSize=None,
+            info="The language you would like their TTS voice to speak in."
         )
         inactive_layout.addWidget(self.their_output_lang, 0, 2)
 
@@ -210,12 +228,12 @@ class MainWindow(QtWidgets.QDialog):
 
 
         # Third row
-        settings_button = QPushButton(helper.translate_ui_text("Settings", settings["ui_language"]))
+        settings_button = QPushButton(helper.translate_ui_text("Settings"))
         settings_button.clicked.connect(self.show_settings)  # connect to method
         inactive_layout.addWidget(settings_button, 3, 0)
 
-        self.start_button = QtWidgets.QPushButton(helper.translate_ui_text("Start", settings["ui_language"]))
-        self.start_button.setStyleSheet("background-color: green")
+        self.start_button = QtWidgets.QPushButton(helper.translate_ui_text("Start"))
+        self.start_button.setStyleSheet(f"background-color: {helper.colors_dict['green']}")
         self.start_button.clicked.connect(self.start_clicked)  # connect to method
         inactive_layout.addWidget(self.start_button, 3, 2)
 
@@ -230,9 +248,8 @@ class MainWindow(QtWidgets.QDialog):
 
         return inactive_layout
 
-    def start_clicked(self):
+    def start_clicked(self, dummyArgForMemProfiler=None):
         assert (self.user is not None)
-
         #Update settings
         cloneNew = False
         if self.voiceType is not None:
@@ -251,8 +268,8 @@ class MainWindow(QtWidgets.QDialog):
             currentVoiceAmount = len(self.user.get_available_voices())
             if currentVoiceAmount >= voiceMax:
                 msgBox = QtWidgets.QMessageBox()
-                msgBox.setWindowTitle("Out of voice slots!")
-                msgBox.setText("You've run out of voice slots.")
+                msgBox.setWindowTitle(helper.translate_ui_text("Out of voice slots!"))
+                msgBox.setText(helper.translate_ui_text("You've run out of voice slots."))
                 msgBox.buttonOk = msgBox.addButton(self.tr("Ok"), QMessageBox.ButtonRole.AcceptRole)
                 msgBox.buttonCancel = msgBox.addButton(self.tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
                 voicesAvailableForDeletion = []
@@ -310,59 +327,77 @@ class MainWindow(QtWidgets.QDialog):
                     text += "output device is no longer valid.\nIt was reset to default. Head to the settings page if you'd like to modify it."
             else:
                 text += "device is no longer valid.\nIt was reset to default. Head to the settings page if you'd like to modify it."
-            msgBox.setText(text)
+            msgBox.setText(helper.translate_ui_text(text))
             msgBox.exec()
             return
 
+        virtualDevices = helper.get_virtual_devices()
+        yourVirtualOutput = virtualDevices["you"]["output"]
+        theirVirtualInput = virtualDevices["them"]["input"]
+        theirVirtualInput = "Microphone (USB-MIC) - 5"
 
-        myVirtualOutput = ""
-        theirVirtualInput = ""
-        for deviceName in helper.get_list_of_portaudio_devices("output", True):
-            if "cable-a" in deviceName.lower():
-                myVirtualOutput = deviceName
-                break
-
-        for deviceName in helper.get_list_of_portaudio_devices("input", True):
-            if "cable-b" in deviceName.lower():
-                theirVirtualInput = deviceName
-                break
+        if yourVirtualOutput is None or theirVirtualInput is None:
+            msgBox = QtWidgets.QMessageBox()
+            msgBox.setText(helper.translate_ui_text("FATAL: Could not find virtual audio devices. Run first time setup again."))
+            msgBox.exec()
+            return
 
         # audioInput:str, audioOutput:str, settings:dict, targetLang:str, voiceIDOrName:str
-        mysrSettings = (settings["my_loudness_threshold"], False, settings["my_pause_time"])    #Removed dynamic_loudness
+        yoursrSettings = (settings["my_loudness_threshold"], False, settings["my_pause_time"])    #Removed dynamic_loudness
         theirsrSettings = (settings["their_loudness_threshold"], False, settings["their_pause_time"])  # Removed dynamic_loudness
 
-        self.myInterpreter = Interpreter(settings["audio_input_device"], myVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=mysrSettings)
+        messageBox = QMessageBox()
+        messageBox.setWindowTitle(helper.translate_ui_text("Starting..."))
+        messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
+        messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
+        signalEmitter = SignalEmitter()
+        signalEmitter.signal.connect(lambda: messageBox.done(0))
+        helper.print_usage_info("Before interpreter setup")
+        def interpreter_setup():
+            self.yourInterpreter = Interpreter(settings["audio_input_device"], yourVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=yoursrSettings)
+            helper.print_usage_info("After your interpreter")
+            # TODO: remove this because it's only for testing
+            if cloneNew:
+                self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),
+                                                    createNewVoice=True, srSettings=theirsrSettings)
+            else:
+                self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"],
+                                                    voiceIDOrName=self.voicePicker.combo_box.currentText(), srSettings=theirsrSettings)
+            helper.print_usage_info("After their interpreter")
+            signalEmitter.signal.emit()
 
-        # TODO: remove this because it's only for testing
-        theirVirtualInput = "Microphone (USB-MIC) - 5"
-        #TODO: TEST THIS.
-        if cloneNew:
-            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),createNewVoice=True, srSettings=theirsrSettings)
-        else:
-            self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.voicePicker.combo_box.currentText(), )
+
+        interpreterThread = threading.Thread(target=interpreter_setup)
+        interpreterThread.start()
+        QTimer.singleShot(1, lambda: (messageBox.activateWindow(), messageBox.raise_()))
+        messageBox.exec()
+        print("Interpreter setup completed")
 
         self.set_state("active")
         self.reset_active_layout()
 
         if cloneNew:
             self.activeLabels["cloneProgress"].setVisible(True)
-            self.speakerButton.setColor(yellowColor)
+            self.speakerButton.setColor(helper.colors_dict['yellow'])
             self.theirInterpreter.cloneProgressSignal.connect(lambda cloneProgress: self.setCloneProgress(cloneProgress))
         else:
             self.activeLabels["cloneProgress"].setVisible(False)
-            self.speakerButton.setColor(greenColor)
+            self.speakerButton.setColor(helper.colors_dict['green'])
 
-        self.myInterpreter.textReadySignal.connect(lambda recognizedText, translatedText: self.setSpeechLabelsText("me", recognizedText, translatedText))
-        self.theirInterpreter.textReadySignal.connect(lambda recognizedText, translatedText: self.setSpeechLabelsText("them", recognizedText, translatedText))
+        self.yourInterpreter.textReadySignal.connect(lambda signalData: self.setSpeechLabelsText("you", signalData))
+        self.theirInterpreter.textReadySignal.connect(lambda signalData: self.setSpeechLabelsText("them", signalData))
 
         self.micButton.clicked.connect(self.micbutton_click)
         self.speakerButton.clicked.connect(self.speakerbutton_click)
 
         if settings["transcription_storage"] == 0:
-            transcriptName = datetime.datetime.now().strftime("%Y-%m-%d - %H.%M.%S.log")
-            self.transcript = open(os.path.join(settings["transcript_save_location"],transcriptName),"w")
+            self.transcript = dict()
+            self.transcript["start"] = datetime.datetime.now()
+            self.transcript["lock"] = threading.Lock()
+            transcriptName = self.transcript["start"].strftime("%Y-%m-%d - %H.%M.%S.srt")
+            self.transcript["file"] = open(os.path.join(settings["transcript_save_location"],transcriptName),"w")
 
-        self.myInterpreter.begin_interpretation()
+        self.yourInterpreter.begin_interpretation()
         #time.sleep(10)
         self.theirInterpreter.begin_interpretation()
 
@@ -371,6 +406,7 @@ class MainWindow(QtWidgets.QDialog):
     def setCloneProgress(self, progressText):
         try:
             progressAmount = float(progressText)
+            progressAmount = int(progressAmount)
         except ValueError:
             progressAmount = None
 
@@ -381,58 +417,128 @@ class MainWindow(QtWidgets.QDialog):
                 self.activeLabels["cloneProgress"].setText(f"Necessary data recorded, processing...")
             elif progressText == "COMPLETE":
                 self.activeLabels["cloneProgress"].setText(f"Clone complete!")
-                if self.speakerButton.getColor() != redColor:
-                    self.speakerButton.setColor(greenColor)
+                if self.speakerButton.getColor() != helper.colors_dict['red']:
+                    self.speakerButton.setColor(helper.colors_dict['green'])
                 else:
-                    self.speakerButton.previousColor = greenColor
+                    self.speakerButton.previousColor = helper.colors_dict['green']
 
-    def setSpeechLabelsText(self, who, recognizedText, translatedText):
+    def setSpeechLabelsText(self, who, signalData:dict):
         try:
-            self.activeLabels[who]["recognized"].setText(recognizedText)
-            self.activeLabels[who]["translated"].setText(translatedText)
-
+            self.activeLabels[who]["recognized"].setText(signalData["recognized"])
+            self.activeLabels[who]["translated"].setText(signalData["translated"])
+            self.micButton.resizeEvent(None)
+            self.speakerButton.resizeEvent(None)
             if self.transcript is not None:
-                identifier = f"{who[0].upper() + who[1:]}@{datetime.datetime.now().strftime('%H:%M:%S')}"
-                self.transcript.write(f"{identifier} (Original) - {recognizedText}\n")
-                self.transcript.write(f"{identifier} (Translated) - {translatedText}\n\n")
-                self.transcript.flush()
+                with self.transcript["lock"]:
+                    signalData["startTime"] -= self.transcript["start"]
+                    signalData["endTime"] -= self.transcript["start"]
+
+                    if "subtitles" not in self.transcript:
+                        self.transcript["subtitles"] = list()
+                    content = f"Original: {signalData['recognized']}\nTranslated: {signalData['translated']}"
+                    newIndex=1
+                    if len(self.transcript["subtitles"]) > 0:
+                        newIndex = self.transcript["subtitles"][-1].index+1
+                    newSub = Subtitle(index=newIndex, start=signalData["startTime"],end=signalData["endTime"], content=srt.make_legal_content(content))
+                    self.transcript["subtitles"].append(newSub)
+
+                    #Let's ensure they're all ordered properly:
+                    self.transcript["subtitles"] = list(srt.sort_and_reindex(self.transcript["subtitles"]))
+
+                    self.transcript["file"].write(newSub.to_srt(strict=False))
+                    self.transcript["file"].flush()
         except RuntimeError as e:
             pass
 
 
 
+
     def micbutton_click(self):
-        if self.micButton.getColor() == redColor:
+        print("Clicked mic button")
+        if self.micButton.getColor() == helper.colors_dict['red']:
             #Already paused
-            self.micButton.setColor(greenColor)
-            self.myInterpreter.detector_paused = False
+            print("Unpausing mic")
+            self.micButton.setColor(helper.colors_dict['green'])
+            self.yourInterpreter.detector_paused = False
         else:
             #Not paused
-            self.micButton.setColor(redColor)
-            self.myInterpreter.detector_paused = True
+            print("Pausing mic")
+            self.micButton.setColor(helper.colors_dict['red'])
+            self.yourInterpreter.detector_paused = True
 
 
     def speakerbutton_click(self):
-        if self.speakerButton.getColor() == redColor:
+        print("Clicked speaker button")
+        if self.speakerButton.getColor() == helper.colors_dict['red']:
             # Already paused
+            print("Unpausing speaker")
             self.speakerButton.setColor(self.speakerButton.getPreviousColor())
             self.theirInterpreter.synthetizer_paused = False
         else:
             # Not paused
-            self.speakerButton.setColor(redColor)
+            print("Pausing speaker")
+            self.speakerButton.setColor(helper.colors_dict['red'])
             self.theirInterpreter.synthetizer_paused = True
 
 
     def stop_clicked(self):
-        self.myInterpreter.detector_paused = False
-        self.theirInterpreter.synthetizer_paused = False
-        self.myInterpreter.stop_interpretation()
-        self.theirInterpreter.stop_interpretation()
-        if self.transcript is not None:
-            self.transcript.flush()
-        self.transcript = None
-        self.set_state("inactive")
+        if self.theirInterpreter.cloner is not None:
+            if self.theirInterpreter.synthetizer.ttsVoice is not None:
+                #We successfully cloned a voice. Update the voice list.
+                newVoice = f"{self.theirInterpreter.synthetizer.ttsVoice.initialName} - {self.theirInterpreter.synthetizer.ttsVoice.voiceID}"
+                self.layout.removeWidget(self.inactiveLayout)
+                self.inactiveLayout = QWidget()
+                self.inactiveLayout.setLayout(self.init_inactive_state())
+                self.layout.addWidget(self.inactiveLayout)
+                self.set_state("inactive")
+                self.voiceType.button_clicked(1, self.on_reuse)
 
+                allItems = [self.voicePicker.combo_box.itemText(i) for i in range(self.voicePicker.combo_box.count())]
+                if newVoice in allItems:
+                    self.voicePicker.combo_box.setCurrentIndex(allItems.index(newVoice))
+                else:
+                    self.voicePicker.combo_box.setCurrentIndex(0)
+                self.adjustSize()
+
+        self.yourInterpreter.detector_paused = False
+        self.theirInterpreter.synthetizer_paused = False
+
+        messageBox = QMessageBox()
+        messageBox.setWindowTitle(helper.translate_ui_text("Stopping..."))
+        messageBox.setText(helper.translate_ui_text("Stopping interpreters, please wait..."))
+        messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
+        signalEmitter = SignalEmitter()
+        signalEmitter.signal.connect(lambda: messageBox.done(0))
+
+        def interpreter_shutdown():
+            print("Exiting your interpreter...")
+            self.yourInterpreter.stop_interpretation()
+            print("Exiting their interpreter...")
+            self.theirInterpreter.stop_interpretation()
+            #del self.theirInterpreter
+            #del self.yourInterpreter
+
+            signalEmitter.signal.emit()
+
+        shutdownThread = threading.Thread(target=interpreter_shutdown)
+        shutdownThread.start()
+        QTimer.singleShot(1, lambda: (messageBox.activateWindow(), messageBox.raise_()))
+        messageBox.exec()
+        print("Interpreter shutdown completed")
+
+        if self.transcript is not None:
+            #Flush it, close it, reopen it and write the finalized version
+            self.transcript["file"].flush()
+            fileName = self.transcript["file"].name
+            self.transcript["file"].close()
+            if "subtitles" in self.transcript:
+                with open(fileName, "w") as fp:
+                    fp.write(srt.compose(self.transcript["subtitles"], reindex=True))
+
+        self.transcript = None
+        gc.collect()
+        self.set_state("inactive")
+        self.adjustSize()
 
     def on_new(self):
         self.nameInput.setVisible(True)
@@ -480,14 +586,12 @@ class MainWindow(QtWidgets.QDialog):
                 self.voicePicker.combo_box.setCurrentIndex(0)
 
 #Helper functions for ffmpeg download/extract
-class SignalEmitter(QObject):
-    download_finished = pyqtSignal()
 def download_ffmpeg(urls, downloadDir, extractDir, currentOS):
     message_box = QMessageBox()
     message_box.setText(helper.translate_ui_text("Downloading FFmpeg. Please wait...", "default - syslang"))
     message_box.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
     signal_emitter = SignalEmitter()
-    signal_emitter.download_finished.connect(lambda: message_box.done(0))
+    signal_emitter.signal.connect(lambda: message_box.done(0))
 
     def download_thread_fn():
         for url in urls:
@@ -508,10 +612,10 @@ def download_ffmpeg(urls, downloadDir, extractDir, currentOS):
             except Exception as e:
                 print(e)
                 shutil.rmtree(extractDir)  # Clean up completely
-                signal_emitter.download_finished.emit()
+                signal_emitter.signal.emit()
 
         shutil.rmtree(downloadDir, ignore_errors=True)  # Clean up
-        signal_emitter.download_finished.emit()
+        signal_emitter.signal.emit()
 
     os.makedirs(downloadDir, exist_ok=True)
     download_thread = threading.Thread(target=download_thread_fn)
@@ -531,7 +635,15 @@ def extract_ffmpeg(file_path, output_dir):
             zip_ref.extractall(output_dir)
 
 def main():
+    tracemalloc.start()
     app = QApplication([])
+    styleSheetPath = "stylesheet.qss"
+    styleSheet = open(styleSheetPath,"r").read()
+
+    for colorKey, colorValue in helper.colors_dict.items():
+        styleSheet = styleSheet.replace("{"+colorKey+"}", colorValue)
+
+    app.setStyleSheet(styleSheet)
 
     try:
         subprocess.check_output('ffmpeg -version', shell=True)
@@ -568,8 +680,24 @@ def main():
         #At this point the binary files for ffmpeg are in ffmpeg-bin in the current directory.
         os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(),"ffmpeg-bin")
 
+    #These are the keys I expect the config to have.
+    expectedKeys  = [
+        "voice_recognition_type",
+        "model_size",
+        "transcription_storage",
+        "ui_language",
+        "audio_input_device",
+        "audio_output_device",
+        "your_ai_voice",
+        "placeholder_ai_voice",
+        "my_loudness_threshold",
+        "my_pause_time"
+    ]
 
-    #TODO: First-time setup if config doesn't exist.
+    missing_keys = set(expectedKeys) - set(settings.keys())
+    if len(missing_keys) > 0:
+        firstTimeSetup.run_first_time_setup()
+
     dialog = MainWindow()
     dialog.show()               #It crashes in debug mode with an access violation unless I put a breakpoint here. What the fuck?
     dialog.activateWindow()
