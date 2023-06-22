@@ -20,28 +20,28 @@ class Cloner:
         self.cloneQueue = cloneQueue
         self.voiceName = voiceName
         self.user = ElevenLabsUser(xiApikey)
-        self.noiseRemoval = None if audoApiKey is None else NoiseRemovalClient(api_key=audoApiKey)
+        self.noiseRemoval = None if audoApiKey is None or audoApiKey == "" else NoiseRemovalClient(api_key=audoApiKey)
         self.interruptEvent = threading.Event()
         self.processedAudioQueue = queue.Queue()
-        self.totalDuration = 0
+        self.totalDuration:float = 0.0
         self.durationLock = threading.Lock()
         self.dataComplete = False
 
     def main_loop(self, cloneProgressSignal:pyqtSignal):
         while True:
             try:
-                audioData:Union[AudioData,str] = self.cloneQueue.get(timeout=5)
+                wavData:Union[bytes,str] = self.cloneQueue.get(timeout=10)
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Cloner main loop exiting...")
                     return None
                 continue
-            print("Recieved audioSegment to clone.")
+            print("Recieved audioSegment to clean.")
 
-            if isinstance(audioData, AudioData):
-                threading.Thread(target=self.clean_audio, args=(audioData.get_wav_data(), cloneProgressSignal)).start()
+            if isinstance(wavData, bytes):
+                threading.Thread(target=self.clean_audio, args=(wavData, cloneProgressSignal)).start()
             else:
-                print("We have enough audioData to create a clone.")
+                print("We have enough audio data to create a clone.")
                 cloneProgressSignal.emit(f"PROCESSING")
 
                 finalizedAudioBytes = list()
@@ -66,8 +66,10 @@ class Cloner:
                         finalizedAudio = temp_audio
 
                 if finalizedAudio.duration_seconds > 0:
-                    finalizedAudio.append(finalizedAudio)
-
+                    finalizedBytes = io.BytesIO()
+                    finalizedAudio.export(finalizedBytes, format="mp3")
+                    finalizedBytes.seek(0)
+                    finalizedAudioBytes.append(finalizedBytes.read())
 
                 samplesDict = dict()
                 for index,audioBytes in enumerate(finalizedAudioBytes):
@@ -78,16 +80,39 @@ class Cloner:
                 return newVoiceID
 
     def clean_audio(self, wavBytes:bytes, cloneProgressSignal:pyqtSignal):
+
+        #TODO: Remove the saving stuff. It's purely for testing.
         i = 0
-        while os.path.exists(f"fileOriginal_{i}.wav"):
+        while os.path.exists(f"Original_{i}.wav"):
             i += 1
 
         with open(f"Original_{i}.wav", "wb") as fp:
             fp.write(wavBytes)
+
+        #TODO: REMOVE THIS DEBUG INSTANT CLONING. DEBUG BYPASS.
+        if os.path.exists(f"Prefab-_0.wav"):
+            i = 0
+            while os.path.exists(f"Prefab-_{i}.wav"):
+                with open(f"Prefab-_{i}.wav", "rb") as fp:
+                    finalAudio = AudioSegment.from_file_using_temporary_files(fp)
+                    print(f"Adding {i} to final queue (DEBUG)")
+                    with self.durationLock:
+                        self.processedAudioQueue.put(finalAudio)
+                        self.totalDuration += finalAudio.duration_seconds
+                        cloneProgressSignal.emit(f"{self.totalDuration}")
+                        if self.totalDuration > requiredDuration and not self.dataComplete:
+                            print(f"After {i} we have enough data to begin.")
+                            self.dataComplete = True
+                            self.cloneQueue.put("dataComplete")
+                            self.processedAudioQueue.put(None)  # Mark the end of the processed audios
+                            return
+                i += 1
+
+
         print(f"Processing audio {i}.")
         audio = AudioSegment.from_file_using_temporary_files(io.BytesIO(wavBytes))
         audio = effects.normalize(audio)
-        target_dBFS = -15
+        target_dBFS = -20
         normalizedAudio:AudioSegment = audio.apply_gain(target_dBFS - audio.dBFS)
 
         with open(f"Normalized_{i}.wav", "wb") as fp:
@@ -100,12 +125,16 @@ class Cloner:
             #Turn into mp3 for smaller upload filesize
             normalizedAudio.export(mp3Bytes, format="mp3")
             mp3Bytes.seek(0)
-            result = self.noiseRemoval.process(mp3Bytes, input_extension="mp3", output_extension="mp3")
-            cleanedAudio = AudioSegment.from_file_using_temporary_files(io.BytesIO(self.download_to_bytes(result.url)))
-            with open(f"Cleaned_{i}.wav", "wb") as fp:
-                cleanedAudio.export(fp, format="wav")
-            print(f"Removed noise from {i}")
-            finalAudio = cleanedAudio
+
+            try:
+                result = self.noiseRemoval.process(mp3Bytes, input_extension="mp3", output_extension="mp3")
+                cleanedAudio = AudioSegment.from_file_using_temporary_files(io.BytesIO(self.download_to_bytes(result.url)))
+                with open(f"Cleaned_{i}.wav", "wb") as fp:
+                    cleanedAudio.export(fp, format="wav")
+                print(f"Removed noise from {i}")
+                finalAudio = cleanedAudio
+            except requests.exceptions.ConnectTimeout:
+                finalAudio = normalizedAudio
         else:
             finalAudio = normalizedAudio
 
@@ -113,7 +142,7 @@ class Cloner:
         with self.durationLock:
             self.processedAudioQueue.put(finalAudio)
             self.totalDuration += finalAudio.duration_seconds
-            cloneProgressSignal.emit(f"{round(self.totalDuration)}")
+            cloneProgressSignal.emit(f"{self.totalDuration}")
             if self.totalDuration > requiredDuration and not self.dataComplete:
                 print(f"After {i} we have enough data to begin.")
                 self.dataComplete = True
