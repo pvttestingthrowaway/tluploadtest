@@ -1,3 +1,5 @@
+import datetime
+import gc
 import io
 import os
 import platform
@@ -6,11 +8,13 @@ import threading
 
 import faster_whisper
 import openai
-from PyQt6.QtCore import pyqtSignal
+import torch
+from faster_whisper.transcribe import TranscriptionInfo
 
 
 class Recognizer:
-    def __init__(self, runLocal, interruptEvent:threading.Event, modelSize=None, apiKey=None):
+
+    def __init__(self, runLocal, modelSize=None, apiKey=None):
         self.runLocal = runLocal
 
         if self.runLocal:
@@ -22,47 +26,75 @@ class Recognizer:
             openai.api_key = apiKey
 
         self.audioQueue = queue.Queue()
-        self.interruptEvent = interruptEvent
-
+        self.interruptEvent = threading.Event()
 
     def main_loop(self):
         while True:
             try:
-                audioData = self.audioQueue.get(timeout=5)
-                audio = audioData["audio"]
+                print("Recognizer waiting...")
+                audioData = self.audioQueue.get(timeout=10)
+                wavBytes = audioData["audio"]
                 resultQueue = audioData["queue"]
+                endTime = audioData["endTime"]
                 cloneQueue = None
                 if "clonequeue" in audioData:
                     cloneQueue = audioData["clonequeue"]
             except queue.Empty:
+                print(self.interruptEvent.is_set())
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
+                    del self.model
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()    #This does work for clearing out the VRAM at least.
+                    gc.collect()
                     return
                 continue
 
+            #TODO (maybe): ADD SILERO-VAD HERE FOR FURTHER FILTERING.
+
             print("Running recognition...")
             if self.runLocal:
-                segments, info = self.model.transcribe(io.BytesIO(audio.get_wav_data()), beam_size=5)
-                audioLanguage = info.language
-                recognizedText = ""
-                for segment in segments:
-                    recognizedText += " " + segment.text
-                recognizedText = recognizedText.strip()
+                segments, info = self.model.transcribe(io.BytesIO(wavBytes), beam_size=5)
+                info:TranscriptionInfo
+                info:dict = dict(info._asdict())
             else:
                 with open("temp.wav","wb+") as fp:
-                    fp.write(audio.get_wav_data())
+                    fp.write(wavBytes)
                     fp.seek(0)
-                    recognizedText = openai.Audio.transcribe("whisper-1", fp, response_format="verbose_json")
-                    audioLanguage = recognizedText.language
-                    recognizedText = recognizedText.text
+                    info:dict = openai.Audio.transcribe("whisper-1", fp, response_format="verbose_json")
+                    segments = info["segments"]
                 os.remove("temp.wav")
+            duration = datetime.timedelta(seconds=info["duration"])
+            audioLanguage = info["language"]
+            recognizedText = ""
+            for segment in segments:
+                if segment.no_speech_prob < 0.70:
+                    recognizedText += " " + segment.text.strip()
+                else:
+                    print(f"Skipping segment {segment.text} with {segment.no_speech_prob*100}% chance of being non-speech")
+            recognizedText = recognizedText.strip()
+
+            hallucinated = False
+
+            if recognizedText == "" or recognizedText == ".":
+                hallucinated = True
+            hallucinations = ["thank you for watching", "thanks for watching", "thank you so much for watching", "Please subscribe to the channel", "."]
+            for hallucination in hallucinations:
+                if hallucination.lower() in recognizedText.lower():
+                    if len(recognizedText) < len(hallucination)+5:
+                        print("Had a likely hallucination. Skipping.")
+                        hallucinated = True
+            if hallucinated:
+                print("Hallucinating, ignoring it...")
+                continue
 
             print(f"recognizedText: {recognizedText}")
-            if recognizedText == "":
-                continue    #Had no actual text.
+
             resultQueue.put({
                     "text":recognizedText,
-                    "lang":audioLanguage
+                    "lang":audioLanguage,
+                    "startTime": endTime-duration,
+                    "endTime": endTime
                 })
             if cloneQueue is not None:
-                cloneQueue.put(audio)
+                cloneQueue.put(wavBytes)
