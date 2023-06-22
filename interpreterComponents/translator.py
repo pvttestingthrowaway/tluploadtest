@@ -51,7 +51,7 @@ class Translator:
     def main_loop(self, textReadySignal:pyqtSignal):
         while True:
             try:
-                tlData = self.tlQueue.get(timeout=5)
+                tlData = self.tlQueue.get(timeout=10)
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Translator exiting...")
@@ -59,8 +59,6 @@ class Translator:
                 continue
 
             textToTL = tlData["text"]
-            if textToTL == "":
-                continue
             print(f"Translating {tlData['text']} from {tlData['lang']}")
             sourceLang = tlData["lang"].lower()
             resultText = None
@@ -78,17 +76,25 @@ class Translator:
 
             if resultText is None:
                 #DeepL was unable to translate it. Use googletrans.
+                targetLang = self.targetLang["name"]
+                if "(" in targetLang:
+                    targetLang = targetLang[:targetLang.index("(")].strip()
                 counter = 0
                 while counter < 10:
                     try:
-                        resultText = self.googleTranslator.translate(textToTL, dest=self.targetLang["name"], src=sourceLang.lower())
+                        resultText = self.googleTranslator.translate(textToTL, dest=targetLang, src=sourceLang.lower())
                         break
                     except TypeError:
                         counter += 1
 
-            if textToTL == ".":
-                textReadySignal.emit("Noise is being detected as speech. Please raise loudness threshold.","Noise is being detected as speech. Please raise loudness threshold.")
-            else:
-                textReadySignal.emit(textToTL, resultText.text)
+            signalData = {
+                "recognized": textToTL,
+                "translated": resultText.text,
+                "startTime": tlData["startTime"],
+                "endTime": tlData["endTime"]
+            }
+
+            textReadySignal.emit(signalData)
+
             print(f"translatedText: {resultText.text}")
             self.ttsQueue.put(resultText.text)

@@ -36,7 +36,7 @@ class Synthesizer:
         threading.Thread(target=self.waitForPlaybackReady).start()  # Starts the thread that handles playback ordering.
         while True:
             try:
-                prompt = self.ttsQueue.get(timeout=5)
+                prompt = self.ttsQueue.get(timeout=10)
             except queue.Empty:
                 if self.interruptEvent.is_set():
                     print("Synthetizer main loop exiting...")
@@ -71,7 +71,7 @@ class Synthesizer:
             self.readyForPlaybackEvent.clear()
             while True:
                 try:
-                    nextEvent = self.eventQueue.get(timeout=5)
+                    nextEvent = self.eventQueue.get(timeout=10)
                 except queue.Empty:
                     if self.interruptEvent.is_set():
                         print("Synthetizer playback loop exiting...")
