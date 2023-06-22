@@ -13,13 +13,29 @@ from utils import helper
 from utils.helper import settings
 
 from PyQt6 import QtWidgets, QtCore
-from PyQt6.QtCore import QPoint, QRect, Qt
-from PyQt6.QtGui import QPainter
+from PyQt6.QtCore import QPoint, QRect, Qt, QObject, pyqtSignal
+from PyQt6.QtGui import QPainter, QPen, QColor
 from PyQt6.QtWidgets import QStyle, QStyleOptionSlider, QSlider, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFileDialog, QLineEdit, QCheckBox
+
+class SignalEmitter(QObject):
+    #Just a dummy helper class for arbitrary signals.
+    signal = pyqtSignal()
+
+class StrSignalEmitter(QObject):
+    #Just a dummy helper class for arbitrary signals.
+    signal = pyqtSignal(str)
+
+class LocalizedDialog(QtWidgets.QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("First time setup")
+
+    def setWindowTitle(self, a0: str) -> None:
+        super().setWindowTitle(helper.translate_ui_text(a0))
 
 class LocalizedCheckbox(QCheckBox):
     def __init__(self, configKey, text=None, cacheSkip=False):
-        super(LocalizedCheckbox, self).__init__(helper.translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
+        super(LocalizedCheckbox, self).__init__(helper.translate_ui_text(text, cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
         self.configKey = configKey
         if configKey not in settings:
@@ -27,7 +43,7 @@ class LocalizedCheckbox(QCheckBox):
         self.setChecked(settings[configKey])
 
     def setText(self, a0: str) -> None:
-        super(LocalizedCheckbox, self).setText(helper.translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
+        super(LocalizedCheckbox, self).setText(helper.translate_ui_text(a0, cacheSkip=self.cacheSkip))
 
     def get_value(self):
         return self.isChecked()
@@ -35,26 +51,29 @@ class LocalizedCheckbox(QCheckBox):
 
 class LocalizedLabel(QLabel):
     def __init__(self, text=None, cacheSkip=False):
-        super(LocalizedLabel, self).__init__(helper.translate_ui_text(text, settings["ui_language"], cacheSkip=cacheSkip))
+        super(LocalizedLabel, self).__init__(helper.translate_ui_text(text, cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
 
     def setText(self, a0: str) -> None:
-        super(LocalizedLabel, self).setText(helper.translate_ui_text(a0, settings["ui_language"], cacheSkip=self.cacheSkip))
+        super(LocalizedLabel, self).setText(helper.translate_ui_text(a0, cacheSkip=self.cacheSkip))
 
 class LocalizedCenteredLabel(LocalizedLabel):
-    def __init__(self, text=None, cacheSkip=False):
+    def __init__(self, text=None, cacheSkip=False, wordWrap=False):
         super(LocalizedCenteredLabel, self).__init__(text, cacheSkip=cacheSkip)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setWordWrap(wordWrap)
 
 class CenteredLabel(QLabel):
-    def __init__(self, text=None):
+    def __init__(self, text=None, wordWrap=False):
         super(CenteredLabel, self).__init__(text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setWordWrap(wordWrap)
 
 class InfoButton(QtWidgets.QPushButton):
+
     def __init__(self, info, isDir=False):
         super().__init__()
-
+        self.info = helper.translate_ui_text(info)
         self.setStyleSheet("background-color: transparent;")
 
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -67,14 +86,26 @@ class InfoButton(QtWidgets.QPushButton):
             self.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DirHomeIcon))
         else:
             self.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation))
-            self.clicked.connect(lambda: self.show_info(helper.translate_ui_text(info, settings["ui_language"])))
+            self.clicked.connect(self.show_info)
 
-    def show_info(self, info):
+    def show_info(self):
         msgBox = QtWidgets.QMessageBox()
-        msgBox.setText(info)
+        msgBox.setTextFormat(Qt.TextFormat.RichText)
+        msgBox.setText(self.info)
         msgBox.exec()
 
 class LabeledInput(QtWidgets.QWidget):
+    """
+    This widget has a label and below it an input.
+    Arguments:
+        label: The text to put above the input
+        configKey: The corresponding configKey to pull the default value from and save the user-selected value to
+        data: The options to choose from. If it's a string, the input will be a lineEdit, if it's a list, it will be a comboBox.
+        info: If it's not None, then an 'info' button will be created which will show the text contained in this argument in a messageBox when clicked.
+        infoIsDir: Replaces the info button with a directory button, which opens a file browser.
+        protected: Saves the config data to the system keyring instead of the 'settings' dict.
+    fixedComboSize and localizeComboBox can be ignored.
+    """
     def __init__(self, label, configKey, data=None, info=None, infoIsDir=False, protected=False, fixedComboBoxSize=30, localizeComboBox=False):
         super().__init__()
         self.configKey = configKey
@@ -127,7 +158,7 @@ class LabeledInput(QtWidgets.QWidget):
                 else:
                     self.combo_box.setCurrentIndex(0)
             else:
-                self.line_edit.setText(currentValue)
+                self.line_edit.setText(str(currentValue))
 
         self.layout.addWidget(self.input_widget)
 
@@ -151,7 +182,7 @@ class ToggleButton(QtWidgets.QWidget):
         super().__init__()
 
         for index, text in enumerate(button_texts):
-            button_texts[index] = helper.translate_ui_text(text, settings["ui_language"])
+            button_texts[index] = helper.translate_ui_text(text)
 
         self.layout = QtWidgets.QGridLayout(self)
         self.selected_button = 0  # add an instance variable to track selected button
@@ -200,8 +231,8 @@ class ToggleButton(QtWidgets.QWidget):
 
     def button_clicked(self, button_index, callback):
         self.selected_button = button_index  # update the selected button index
-        self.button1.setStyleSheet('' if button_index else 'background-color: yellow')
-        self.button2.setStyleSheet('background-color: yellow' if button_index else '')
+        self.button1.setStyleSheet('' if button_index else f'background-color: {helper.colors_dict["toggle_color"]}')
+        self.button2.setStyleSheet(f'background-color: {helper.colors_dict["toggle_color"]}' if button_index else '')
         callback()
 
     def get_value(self):
@@ -245,7 +276,10 @@ class LabeledSlider(QWidget):
         self.sl.setMinimum(minimum)
         self.sl.setMaximum(maximum)
         self.sl.setValue(minimum)
-        self.sl.setSliderPosition(defaultPosition)
+        if configKey in settings:
+            self.sl.setSliderPosition(settings[configKey])
+        else:
+            self.sl.setSliderPosition(defaultPosition)
         if orientation==Qt.Orientation.Horizontal:
             self.sl.setTickPosition(QSlider.TickPosition.TicksBelow)
             self.sl.setMinimumWidth(300) # just to make it easier to read
@@ -258,13 +292,16 @@ class LabeledSlider(QWidget):
         self.sl.valueChanged.connect(self.on_value_changed)
 
         self.layout.addWidget(self.sl)
-        self.layout.addWidget(LocalizedLabel("VRAM usage:"))
+        self.layout.addWidget(LocalizedLabel("VRAM usage, RAM usage:"))
 
     def paintEvent(self, e):
 
         super(LabeledSlider,self).paintEvent(e)
         style=self.sl.style()
         painter=QPainter(self)
+        pen = QPen()
+        pen.setColor(QColor(helper.colors_dict["text_color"]))
+        painter.setPen(pen)
         st_slider=QStyleOptionSlider()
         st_slider.initFrom(self.sl)
         st_slider.orientation=self.sl.orientation()
@@ -285,7 +322,7 @@ class LabeledSlider(QWidget):
 
                 # left bound of the text = center - half of text width + L_margin
                 left=x_loc-rect.width()//2+self.left_margin
-                bottom=self.rect().bottom()
+                bottom=self.rect().bottom()-3
 
                 # enlarge margins if clipping
                 if v==self.sl.minimum():
@@ -308,7 +345,7 @@ class LabeledSlider(QWidget):
                 y_loc=QStyle.sliderPositionFromValue(self.sl.minimum(),
                         self.sl.maximum(), v, available, upsideDown=True)
 
-                bottom=y_loc+length//2+rect.height()//2+self.top_margin-3
+                bottom=y_loc+length//2+rect.height()//2+self.top_margin-5
                 # there is a 3 px offset that I can't attribute to any metric
 
                 left=self.left_margin-rect.width()
@@ -454,7 +491,8 @@ class SpeechRecWidget(QtWidgets.QWidget):
         self.myEnergyThreshold = LabeledInput(
             "My loudness threshold",
             configKey="my_loudness_threshold",
-            data="250"
+            data="250",
+            info="This indicates how loud you have to be for your voice to be detected."
         )
         self.layout.addWidget(self.myEnergyThreshold, 0, 0)
 
@@ -464,7 +502,8 @@ class SpeechRecWidget(QtWidgets.QWidget):
         self.myPauseTime = LabeledInput(
             "My pause time (in seconds)",
             data="0.5",
-            configKey="my_pause_time"
+            configKey="my_pause_time",
+            info="This indicates how long you have to pause before a sentence is considered over."
         )
         self.layout.addWidget(self.myPauseTime, 1, 0)
 
@@ -498,7 +537,7 @@ class LocalWidgets(QtWidgets.QWidget):
 
         self.VRAMlabel = LocalizedCenteredLabel(cacheSkip=True)
         self.update_memory_label()
-        labels = ["1 GB", "2 GB", "3 GB", "5 GB"]
+        labels = ["1.5GB, 5GB", "2GB, 5GB", "3GB, 6GB", "4.5GB, 8GB"]
         self.slider = LabeledSlider(minimum=0, maximum=3,labels=labels, defaultPosition=2, configKey="model_size")
         self.layout.addWidget(LocalizedLabel("Fast"),0,0,1,1)
         self.layout.addWidget(self.slider, 0, 1, 2, 1)
@@ -510,7 +549,6 @@ class LocalWidgets(QtWidgets.QWidget):
             #self.layout.setColumnStretch(i, 1)
 
     def update_memory_label(self):
-        return
         import torch
         if not torch.cuda.is_available():
             labelText = "CUDA support missing. Either you don't have an NVIDIA GPU, or it's not compatible with CUDA 11.\nUsing local mode is not recommended."
@@ -586,11 +624,12 @@ class AzureWidgets(QtWidgets.QWidget):
     def on_change(self, text):
         print(f"Selected option: {text}")
 
-class ConfigDialog(QtWidgets.QDialog):
+class ConfigDialog(LocalizedDialog):
     def __init__(self):
         super().__init__()
 
         user = None
+        self.setWindowTitle("Settings")
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
         if apiKey is not None:
             try:
@@ -603,15 +642,28 @@ class ConfigDialog(QtWidgets.QDialog):
         self.input_device = LabeledInput(
             "Audio input device",
             configKey = "audio_input_device",
-            data=helper.get_list_of_portaudio_devices("input")
+            data=helper.get_list_of_portaudio_devices("input"),
+            info=f"dummy"
         )
+        virtualDevices = helper.get_virtual_devices()
+        inputInfo = helper.translate_ui_text("This is the microphone you will be speaking into.<br>")   #have to use BR due to pyqt quirk.
+        virtualInput = virtualDevices['you']['input']
+        virtualInput = virtualInput[:virtualInput.index(" - ")]
+        inputInfo += helper.translate_ui_text("Please set the input device in your chat app to") + f": {virtualInput}"
+        self.input_device.info_button.info = inputInfo
         self.layout.addWidget(self.input_device, currentRow, 0)
 
         self.output_device = LabeledInput(
             "Audio output device",
             configKey="audio_output_device",
-            data = helper.get_list_of_portaudio_devices("output")
+            data = helper.get_list_of_portaudio_devices("output"),
+            info=f"dummy"
         )
+        outputInfo = helper.translate_ui_text("This is the device you will hear audio from.<br>")
+        virtualOutput = virtualDevices['them']['output']
+        virtualOutput = virtualOutput[:virtualOutput.index(" - ")]
+        outputInfo += helper.translate_ui_text("Please set the output device in your chat app to") + f": {virtualOutput}"
+        self.output_device.info_button.info = outputInfo
         self.layout.addWidget(self.output_device, currentRow, 2)
 
         currentRow += 1
@@ -620,7 +672,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "DeepL API Key (Optional)",
             configKey="deepl_api_key",
             protected=True,
-            info="Optional. If the language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
+            info="Optional. If a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
         )
         self.layout.addWidget(self.deepl_api_key, currentRow, 0)
 
@@ -628,7 +680,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "Audo API Key (Optional)",
             configKey="audo_api_key",
             protected=True,
-            info="Optional, enhances the audio for clone creation."
+            info="Optional. Enhances the audio for clone creation, resulting in a higher quality clone."
         )
         self.layout.addWidget(self.audo_api_key, currentRow, 2)
 
@@ -646,16 +698,18 @@ class ConfigDialog(QtWidgets.QDialog):
         currentRow += 1
 
         self.your_ai_voice = LabeledInput(
-            "Your AI Voice",
+            "Your TTS Voice",
             configKey="your_ai_voice",
-            data=helper.get_list_of_voices(user)
+            data=helper.get_list_of_voices(user),
+            info="This is the TTS voice that will be used to speak your translated messages."
         )
         self.layout.addWidget(self.your_ai_voice, currentRow, 0)
 
         self.placeholder_ai_voice = LabeledInput(
-            "Placeholder AI Voice",
+            "Placeholder TTS Voice",
             configKey="placeholder_ai_voice",
-            data=helper.get_list_of_voices(user)
+            data=helper.get_list_of_voices(user),
+            info="This is the TTS voice that will be used to speak the other user's translated messages while a clone is being generated."
         )
         self.layout.addWidget(self.placeholder_ai_voice, currentRow, 2)
 
@@ -674,7 +728,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "Transcription storage",
             ["Enable", "Disable"],
             [self.on_enable, self.on_disable],
-            info="TRANSCRIPTSTORAGEINFO",
+            info="If enabled, PolyEcho will save a .srt transcript of all audio (both the recognized and translated text) to the specified directory.",
             configKey="transcription_storage"
         )
         self.layout.addWidget(self.transcription_storage, currentRow, 0)
@@ -707,7 +761,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "Voice recognition type",
             ["Local", "Online"],
             [self.on_local, self.on_online],
-            info="This is the type of voice recognition.",
+            info="This is the type of voice recognition.<br>Local runs on your machine, is free, and is the fastest in terms of latency, but the speed depends on your GPU.<br>Online utilizes OpenAI's Whisper API. It has higher latency, but will run on any computer.",
             configKey="voice_recognition_type"
         )
 
@@ -726,13 +780,13 @@ class ConfigDialog(QtWidgets.QDialog):
         # Save and Cancel buttons
         buttonLayout = QtWidgets.QHBoxLayout()
 
-        saveButton = QtWidgets.QPushButton(helper.translate_ui_text("Save", settings["ui_language"]))
+        saveButton = QtWidgets.QPushButton(helper.translate_ui_text("Save"))
         saveButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
         saveButton.setMinimumSize(30, 25)  # adjust the size as per your need
         saveButton.clicked.connect(self.save_clicked)
         buttonLayout.addWidget(saveButton)
 
-        cancelButton = QtWidgets.QPushButton(helper.translate_ui_text("Cancel", settings["ui_language"]))
+        cancelButton = QtWidgets.QPushButton(helper.translate_ui_text("Cancel"))
         cancelButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
         cancelButton.setMinimumSize(30, 25)  # adjust the size as per your need
         cancelButton.clicked.connect(self.cancel_clicked)
@@ -801,7 +855,7 @@ class ConfigDialog(QtWidgets.QDialog):
                             user = elevenlabslib.ElevenLabsUser(value)
                             if not user.get_voice_clone_available():
                                 msgBox = QtWidgets.QMessageBox()
-                                msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available.", settings["ui_language"]))
+                                msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available."))
                                 msgBox.exec()
                         except ValueError:
                             errorMessage += "\nElevenLabs API error. API Key may be incorrect."
@@ -863,7 +917,7 @@ class ConfigDialog(QtWidgets.QDialog):
             tlCachingThread.join()
         if errorMessage != "":
             msgBox = QtWidgets.QMessageBox()
-            msgBox.setText(helper.translate_ui_text(errorMessage, settings["ui_language"]))
+            msgBox.setText(helper.translate_ui_text(errorMessage))
             msgBox.exec()
             return
         else:
