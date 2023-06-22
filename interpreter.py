@@ -9,19 +9,23 @@ from interpreterComponents.cloner import Cloner
 from interpreterComponents.detector import Detector
 from interpreterComponents.synthetizer import Synthesizer
 from interpreterComponents.translator import Translator
+from utils import helper
 
 GIL = threading.Lock()
 class Interpreter(QObject):
-    textReadySignal = pyqtSignal(str, str)
+    textReadySignal = pyqtSignal(object)
     cloneProgressSignal = pyqtSignal(str)
+
 
     def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, srSettings:tuple,createNewVoice: bool=False):
         super().__init__()
-        self.threads = None
+        self.threads = list()
+        self.interruptEvents = list()
         self._paused = threading.Event()
         self.ttsQueue = queue.Queue()
         self.tlQueue = queue.Queue()
         self.cloneQueue = None
+        self.cloner = None
         useLocal = settings["voice_recognition_type"] == 0
         openAIAPIKey = keyring.get_password("polyecho", "openai_api_key")
         deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key")
@@ -29,6 +33,8 @@ class Interpreter(QObject):
 
         modelSizes = ["base", "small", "medium", "large-v2"]
         modelSize = modelSizes[settings["model_size"]]
+        if useLocal:
+            print(f"Using {modelSize} for faster-whisper")
         xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
 
         placeHolderVoiceID = settings["placeholder_ai_voice"]
@@ -47,7 +53,11 @@ class Interpreter(QObject):
                                  srSettings=srSettings, modelSize=modelSize, tlQueue=self.tlQueue, cloneQueue=self.cloneQueue)
 
         self.translator = Translator(deeplAPIKey=deepLAPIKey, targetLang=targetLang, tlQueue=self.tlQueue, ttsQueue=self.ttsQueue)
-        self.interruptEvents = list()
+
+        if self.detector.recognizerData is not None:
+            self.interruptEvents.append(self.detector.recognizerData["event"])
+            self.threads.append(self.detector.recognizerData["thread"])
+
         self.interruptEvents.append(self.detector.interruptEvent)
         self.interruptEvents.append(self.translator.interruptEvent)
         self.interruptEvents.append(self.synthetizer.interruptEvent)
@@ -55,7 +65,7 @@ class Interpreter(QObject):
             self.interruptEvents.append(self.cloner.interruptEvent)
 
     def begin_interpretation(self):
-        self.threads = list()
+        helper.print_usage_info("Before begin interpretation")
         self.threads.append(threading.Thread(target=self.detector.main_loop))
         self.threads.append(threading.Thread(target=self.translator.main_loop, args=(self.textReadySignal,)))
         self.threads.append(threading.Thread(target=self.synthetizer.main_loop))
@@ -65,8 +75,15 @@ class Interpreter(QObject):
 
         for thread in self.threads:
             thread.start()
-
+        helper.print_usage_info("After begin interpretation")
         print("Intepretation started.")
+
+    def stop_interpretation(self):
+        for event in self.interruptEvents:
+            event.set()
+
+        for thread in self.threads:
+            thread.join()
 
     def wait_for_clone(self):
         newVoiceID = self.cloner.main_loop(self.cloneProgressSignal)
@@ -74,6 +91,7 @@ class Interpreter(QObject):
             return  #Exited before it could be completed.
 
         self.synthetizer.set_voice(newVoiceID)
+        self.detector.cloneQueue = None
     #These two methods are different owing to the difference in pause behavior.
     @property
     def detector_paused(self):
@@ -97,12 +115,7 @@ class Interpreter(QObject):
         else:
             self.synthetizer.isRunning.set()
 
-    def stop_interpretation(self):
-        for event in self.interruptEvents:
-            event.set()
 
-        for thread in self.threads:
-            thread.join()
     @property
     def paused(self):
         return self._paused.is_set()
