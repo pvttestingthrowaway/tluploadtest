@@ -7,6 +7,7 @@ from typing import Union
 
 import googletrans
 import httpcore
+import psutil
 import sounddevice
 import unicodedata
 from elevenlabslib import ElevenLabsUser
@@ -22,7 +23,21 @@ default_settings = {
     "voice_recognition_type": 0,
     "model_size": 2,
     "transcription_storage": 1,
-    "ui_language": "System Language - syslang"
+    "ui_language": "System Language - syslang",
+    "their_loudness_threshold": "250",
+    "their_pause_time": "0.5"
+}
+
+
+colors_dict = {
+    "primary_color":"#1A1D22",
+    "secondary_color":"#282C34",
+    "hover_color":"#596273",
+    "text_color":"#FFFFFF",
+    "toggle_color":"#4a708b",
+    "green":"#3a7a3a",
+    "yellow":"#7a7a3a",
+    "red":"#7a3a3a"
 }
 
 #Let's ensure that the tlCache exists and that we have a tlCache object.
@@ -116,7 +131,7 @@ def get_googletrans_native_langnames(currentLang):
             sorted_langList.pop(index)
             sorted_langList.insert(0, lang)
             break
-    sysLangString = f"{translate_ui_text('System language',currentLang, cacheSkip=True)} - syslang"
+    sysLangString = f"{translate_ui_text('System language',languageOverride=currentLang, cacheSkip=True)} - syslang"
     sorted_langList.insert(0, sysLangString)
     return sorted_langList
 
@@ -184,12 +199,14 @@ def tl_cache_prep(target_language):
     with open(tlCachePath, 'w') as f:
         json.dump(tlCache, f, ensure_ascii=False, indent=4)
 
-def translate_ui_text(text, language, cacheKey=None, cacheSkip=False):
+def translate_ui_text(text, cacheKey=None, cacheSkip=False, languageOverride=None):
     #Language is in the form "NativeName - LangCode"
     if text is None or text == "":
         return text
-
-    langCode = get_code_from_langstring(language)
+    if languageOverride is not None:
+        langCode = get_code_from_langstring(languageOverride)
+    else:
+        langCode = get_code_from_langstring(settings["ui_language"])
 
     cacheUpdated = False
     if cacheKey is None:
@@ -362,7 +379,7 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
     langString = "\n".join(langName for langName, langCode in langPairs)
 
 
-    langStringTL = translate_ui_text(langString, languageToLocalizeIn, cacheKey="Language Names")
+    langStringTL = translate_ui_text(langString, cacheKey="Language Names", languageOverride=languageToLocalizeIn)
     langCode = languageToLocalizeIn.split(" - ")[1]
 
     # Split translated string back into individual language names and capitalize them if necessary
@@ -374,3 +391,32 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
     langList = [f"{langName} - {langCode}" for (langName, langCode) in zip(langNamesTL, (langCode for _, langCode in langPairs))]
 
     return langList
+
+def get_virtual_devices() -> dict:
+    devices = dict()
+    devices["you"] = dict()
+    devices["them"] = dict()
+    for deviceType in ["input","output"]:
+        for deviceName in get_list_of_portaudio_devices(deviceType, True):
+            if "cable-a" in deviceName.lower():
+                devices["you"][deviceType] = deviceName
+            if "cable-b" in deviceName.lower():
+                devices["them"][deviceType] = deviceName
+
+    return devices
+
+
+
+
+#TODO: Remove this.
+def print_usage_info(codeID):
+    print("===================RESOURCE USAGE STATS===================")
+    print(codeID)
+    from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
+    nvmlInit()
+    h = nvmlDeviceGetHandleByIndex(0)
+    info = nvmlDeviceGetMemoryInfo(h)
+    print(f"VRAM usage: {round(info.used / pow(10, 9), 2)}GB")
+    process = psutil.Process(os.getpid())
+    print(f"RAM usage: {round(process.memory_info().rss / pow(10, 9), 2)}GB")
+    print("")
