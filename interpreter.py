@@ -61,7 +61,8 @@ class Interpreter(QObject):
 
         self.synthetizer = Synthesizer(apiKey=xiApiKey, outputDeviceName=audioOutput, ttsQueue=self.ttsQueue, voiceID=voiceID, isPlaceHolder=createNewVoice)
 
-        Interpreter.init_wrecognizer(runLocal, modelSize, openAIAPIKey)
+        with Interpreter.GIL:
+            Interpreter.init_wrecognizer(runLocal, modelSize, openAIAPIKey)
 
         self.detector = Detector(inputDeviceName=audioInput,
                                  srSettings=srSettings, tlQueue=self.tlQueue, cloneQueue=self.cloneQueue,
@@ -97,23 +98,22 @@ class Interpreter(QObject):
         print("Intepretation started.")
 
     def set_interrupts(self):
-        if Interpreter.wRecognizer is not None:
-            Interpreter.wRecognizer.interruptEvent.set()
+        with Interpreter.GIL:
+            if Interpreter.wRecognizer is not None:
+                Interpreter.wRecognizer.interruptEvent.set()
 
         for event in self.interruptEvents:
             event.set()
 
 
     def stop_interpretation(self):
-        if Interpreter.wRecognizer is not None:
-            if Interpreter.wRecognizerThread.is_alive():
-                Interpreter.wRecognizerThread.join()
+        with Interpreter.GIL:
+            if Interpreter.wRecognizer is not None:
+                if Interpreter.wRecognizerThread.is_alive():
+                    Interpreter.wRecognizerThread.join()
 
-            del Interpreter.wRecognizer
-            del Interpreter.wRecognizerThread
-            gc.collect()
-            Interpreter.wRecognizer = None
-            Interpreter.wRecognizerThread = None
+                Interpreter.wRecognizer = None
+                Interpreter.wRecognizerThread = None
 
         for thread in self.threads:
             thread.join()

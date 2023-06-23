@@ -517,8 +517,6 @@ class MainWindow(QtWidgets.QDialog):
             self.yourInterpreter.stop_interpretation()
             print("Exiting their interpreter...")
             self.theirInterpreter.stop_interpretation()
-            #del self.theirInterpreter
-            #del self.yourInterpreter
 
             signalEmitter.signal.emit()
 
@@ -538,7 +536,6 @@ class MainWindow(QtWidgets.QDialog):
                     fp.write(srt.compose(self.transcript["subtitles"], reindex=True))
 
         self.transcript = None
-        gc.collect()
         self.set_state("inactive")
         self.adjustSize()
 

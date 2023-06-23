@@ -45,9 +45,9 @@ class Recognizer:
                 print(self.interruptEvent.is_set())
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
-                    del self.model
+                    del self.model  #This is just to ensure the allocated resources are free'd up correctly.
                     if torch.cuda.is_available():
-                        torch.cuda.empty_cache()  # This does work for clearing out the VRAM at least.
+                        torch.cuda.empty_cache()
                     gc.collect()
                     return
 
