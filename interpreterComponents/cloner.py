@@ -32,10 +32,11 @@ class Cloner:
             try:
                 wavData:Union[bytes,str] = self.cloneQueue.get(timeout=10)
             except queue.Empty:
+                continue
+            finally:
                 if self.interruptEvent.is_set():
                     print("Cloner main loop exiting...")
                     return None
-                continue
             print("Recieved audioSegment to clean.")
 
             if isinstance(wavData, bytes):

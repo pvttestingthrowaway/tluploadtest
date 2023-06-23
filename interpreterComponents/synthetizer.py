@@ -38,10 +38,12 @@ class Synthesizer:
             try:
                 prompt = self.ttsQueue.get(timeout=10)
             except queue.Empty:
+                continue
+            finally:
                 if self.interruptEvent.is_set():
                     print("Synthetizer main loop exiting...")
                     return
-                continue
+
             if self.isRunning.is_set():
                 print(f"Synthesizing prompt: {prompt}")
                 self.synthesizeAndPlayAudio(prompt)
@@ -73,9 +75,10 @@ class Synthesizer:
                 try:
                     nextEvent = self.eventQueue.get(timeout=10)
                 except queue.Empty:
+                    continue
+                finally:
                     if self.interruptEvent.is_set():
                         print("Synthetizer playback loop exiting...")
                         return
-                    continue
                 nextEvent.set()
                 break

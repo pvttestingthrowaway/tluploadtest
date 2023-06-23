@@ -287,7 +287,7 @@ class SpeechDetectInput(SetupDialog):
         signalEmitter = StrSignalEmitter()
         srSettings = (threshold, False, pauseTime)
         audioDataQueue = queue.Queue()
-        detector = Detector(audioDataQueue, None, settings["audio_input_device"],srSettings)
+        detector = Detector(None, settings["audio_input_device"],srSettings, audioDataQueue)
 
         # Start the detection thread...
         detectorThread = threading.Thread(target=detector.main_loop)
@@ -307,10 +307,11 @@ class SpeechDetectInput(SetupDialog):
                     queueData: dict = audioDataQueue.get(timeout=10)
                 except queue.Empty:
                     print("Couldn't get an item from the queue within the timeout...")
+                    continue
+                finally:
                     if stopRecEvent.is_set():
                         print("Stopping detection sample...")
                         break
-                    continue
                 # Got an item from the queue, update the messagebox timestamp.
                 print("Got an item from the queue.")
                 signalEmitter.signal.emit(queueData["endTime"].strftime("%H:%M:%S"))

@@ -11,12 +11,10 @@ import speech_recognition as sr #TODO: Remember this has a pyaudio dependency.
 import openai
 
 from utils import helper
-from interpreterComponents.recognizer import Recognizer
 
-wRecognizer:Optional[Recognizer] = None
-GIL = threading.Lock()
 class Detector:
-    def __init__(self, tlQueue, runLocal, inputDeviceName, srSettings:tuple, modelSize=None, apiKey=None, cloneQueue=None):
+    GDL = threading.Lock()
+    def __init__(self, tlQueue: queue.Queue, inputDeviceName:str, srSettings:tuple, audioQueue: queue.Queue, cloneQueue=None):
         self.microphoneInfo = helper.get_portaudio_device_info_from_name(inputDeviceName, "input")
         self.srMic = sr.Microphone(device_index=self.microphoneInfo["index"], sample_rate=int(self.microphoneInfo["default_samplerate"]))
         self.srRecognizer = sr.Recognizer()
@@ -31,29 +29,17 @@ class Detector:
         self.isRunning.set()
         self.recognizerData = None
 
-        global wRecognizer
-        with GIL:
-            if wRecognizer is None and (apiKey is not None or modelSize is not None):
-                self.recognizerData = dict()
-                helper.print_usage_info("Before recognizer init")
-                wRecognizer = Recognizer(runLocal, modelSize, apiKey)
-                self.recognizerData["thread"] = threading.Thread(target=wRecognizer.main_loop)
-                self.recognizerData["event"] = wRecognizer.interruptEvent
-                helper.print_usage_info("After recognizer init")
-            elif wRecognizer is None and apiKey is None and modelSize is None:
-                #UGLY UGLY UGLY Fake wRecognizer for settings testing.
-                wRecognizer = type("", (), {"audioQueue":tlQueue})()
-
         self.resultQueue = tlQueue
         self.cloneQueue:queue.Queue = cloneQueue
+        self.audioQueue = audioQueue
 
 
     def main_loop(self):
-        GIL.acquire()
+        Detector.GDL.acquire()
         with self.srMic as source:
             self.srRecognizer.adjust_for_ambient_noise(source)
-            GIL.release()
-            global wRecognizer
+            Detector.GDL.release()
+
             while True:
                 self.isRunning.wait()  #Wait until we're running. This ensures that we don't accidentally record while muted.
                 print("Detecting audio...")
@@ -64,13 +50,11 @@ class Detector:
                     #I have no idea what a better fix would be.
                 except sr.WaitTimeoutError:
                     print("Audio rec interrupted")
+                    continue
+                finally:
                     if self.interruptEvent.is_set():
                         print("Detector exiting...")
-                        del wRecognizer
-                        gc.collect()
-                        wRecognizer = None
                         break
-                    continue
 
                 print(f"Audio detected on {self.srMic.device_index}.")
                 audioData = {
@@ -81,8 +65,9 @@ class Detector:
 
                 if self.cloneQueue is not None:
                     audioData["clonequeue"] = self.cloneQueue
-                if wRecognizer is not None:
-                    wRecognizer.audioQueue.put_nowait(audioData)
+
+                if self.audioQueue is not None:
+                    self.audioQueue.put_nowait(audioData)
                 else:
                     print("wRecognizer is none.")
 

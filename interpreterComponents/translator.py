@@ -53,10 +53,11 @@ class Translator:
             try:
                 tlData = self.tlQueue.get(timeout=10)
             except queue.Empty:
+                continue
+            finally:
                 if self.interruptEvent.is_set():
                     print("Translator exiting...")
                     return
-                continue
 
             textToTL = tlData["text"]
             print(f"Translating {tlData['text']} from {tlData['lang']}")

@@ -511,6 +511,8 @@ class MainWindow(QtWidgets.QDialog):
         signalEmitter.signal.connect(lambda: messageBox.done(0))
 
         def interpreter_shutdown():
+            self.yourInterpreter.set_interrupts()
+            self.theirInterpreter.set_interrupts()
             print("Exiting your interpreter...")
             self.yourInterpreter.stop_interpretation()
             print("Exiting their interpreter...")

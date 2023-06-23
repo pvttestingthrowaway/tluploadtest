@@ -40,15 +40,16 @@ class Recognizer:
                 if "clonequeue" in audioData:
                     cloneQueue = audioData["clonequeue"]
             except queue.Empty:
+                continue
+            finally:
                 print(self.interruptEvent.is_set())
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
                     del self.model
                     if torch.cuda.is_available():
-                        torch.cuda.empty_cache()    #This does work for clearing out the VRAM at least.
+                        torch.cuda.empty_cache()  # This does work for clearing out the VRAM at least.
                     gc.collect()
                     return
-                continue
 
             #TODO (maybe): ADD SILERO-VAD HERE FOR FURTHER FILTERING.
 
