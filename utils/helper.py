@@ -3,13 +3,18 @@ import json
 import os
 import platform
 import re
-from typing import Union
+from typing import Union, Optional
 
+import deepl
+import elevenlabslib
 import googletrans
 import httpcore
 import psutil
 import sounddevice
 import unicodedata
+import websocket
+from PyQt6 import QtWidgets
+from audoai.noise_removal import NoiseRemovalClient
 from elevenlabslib import ElevenLabsUser
 
 #The following is a pre-baked list of translated languages.
@@ -405,8 +410,62 @@ def get_virtual_devices() -> dict:
 
     return devices
 
+maxAPIRetries = 3
+def get_xi_user(apiKey, exitOnFail=True) -> Optional[elevenlabslib.ElevenLabsUser]:
+    errorMessage = ""
+    for i in range(maxAPIRetries):
+        try:
+            user: elevenlabslib.ElevenLabsUser = elevenlabslib.ElevenLabsUser(apiKey)
+            return user
+        except ValueError:
+            errorMessage = "Invalid API key!"
+            break
+        except AttributeError:
+            errorMessage = "Could not connect to the Elevenlabs API. Please try again later."
 
+    # We exhausted the tries without successfully getting the user.
+    if exitOnFail:
+        show_msgbox_and_exit(errorMessage)
 
+    return None
+#TODO: Figure out the errors for timeouts.
+def get_deepl_translator(apiKey, exitOnFail=True) -> Optional[deepl.Translator]:
+    errorMessage = ""
+    for i in range(maxAPIRetries):
+        deeplTranslator = deepl.Translator(apiKey).set_app_info("polyecho", "1.0.0")
+        try:
+            deeplTranslator.get_usage()
+            return deeplTranslator
+        except deepl.AuthorizationException:
+            errorMessage = "\nDeepL API error. API Key may be incorrect."
+
+    # We exhausted the tries without successfully getting the user.
+    if exitOnFail:
+        show_msgbox_and_exit(errorMessage)
+
+    return None
+
+def get_audo_client(apiKey, exitOnFail=True) -> Optional[NoiseRemovalClient]:
+    errorMessage = ""
+    for i in range(maxAPIRetries):
+        audoClient = NoiseRemovalClient(apiKey)
+        try:
+            socket = audoClient.connect_websocket("TestID")
+            socket.close()
+            return audoClient
+        except websocket.WebSocketBadStatusException:
+            errorMessage = "Audo API error. API Key may be incorrect, or it may be unreachable."
+
+    # We exhausted the tries without successfully getting the user.
+    if exitOnFail:
+        show_msgbox_and_exit(errorMessage)
+    return None
+
+def show_msgbox_and_exit(text, exitCode=1):
+    msgBox = QtWidgets.QMessageBox()
+    msgBox.setText(translate_ui_text(text))
+    msgBox.exec()
+    exit(1)
 
 #TODO: Remove this.
 def print_usage_info(codeID):

@@ -58,14 +58,13 @@ class SetupDialog(LocalizedDialog):
 
                 # Now we check the constraints depending on the API key.
                 if configKey == "elevenlabs_api_key":
-                    try:
-                        user = elevenlabslib.ElevenLabsUser(value)
-                        if not user.get_voice_clone_available():
-                            msgBox = QtWidgets.QMessageBox()
-                            msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available."))
-                            msgBox.exec()
-                    except ValueError:
+                    user = helper.get_xi_user(value, exitOnFail=False)
+                    if user is None:
                         errorMessage += "\nElevenLabs API error. API Key may be incorrect."
+                    elif not user.get_voice_clone_available():
+                        msgBox = QtWidgets.QMessageBox()
+                        msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available."))
+                        msgBox.exec()
 
                 if configKey == "openai_api_key":
                     openai.api_key = value
@@ -75,18 +74,13 @@ class SetupDialog(LocalizedDialog):
                         errorMessage += "\nOpenAI API error. API Key may be incorrect."
 
                 if configKey == "deepl_api_key" and value != "":
-                    deeplTranslator = deepl.Translator(value).set_app_info("polyecho", "1.0.0")
-                    try:
-                        deeplTranslator.get_usage()
-                    except deepl.AuthorizationException:
+                    deeplTranslator = helper.get_deepl_translator(value, exitOnFail=False)
+                    if deeplTranslator is None:
                         errorMessage += "\nDeepL API error. API Key may be incorrect."
 
                 if configKey == "audo_api_key" and value != "":
-                    audoClient = NoiseRemovalClient(value)
-                    try:
-                        socket = audoClient.connect_websocket("TestID")
-                        socket.close()
-                    except websocket.WebSocketBadStatusException:
+                    audoClient = helper.get_audo_client(value, exitOnFail=False)
+                    if audoClient is None:
                         errorMessage += "\nAudo API error. API Key may be incorrect."
 
                 if configKey == "transcript_save_location":
@@ -204,7 +198,7 @@ class VoiceInput(SetupDialog):
         super().__init__("Please choose your AI voice and the placeholder voice.")
 
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        user = elevenlabslib.ElevenLabsUser(apiKey)
+        user = helper.get_xi_user(apiKey)
 
         self.your_ai_voice = LabeledInput(
             "Your AI Voice",

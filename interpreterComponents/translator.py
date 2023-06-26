@@ -6,6 +6,8 @@ import googletrans
 import deepl
 from PyQt6.QtCore import pyqtSignal
 
+from utils import helper
+
 
 class Translator:
     def __init__(self, deeplAPIKey:str, targetLang:str, tlQueue:queue.Queue, ttsQueue:queue.Queue):
@@ -23,7 +25,7 @@ class Translator:
             langCode = "pt-br"
 
         if deeplAPIKey is not None and deeplAPIKey != "":
-            self.deepLTranslator = deepl.Translator(deeplAPIKey).set_app_info("polyecho","1.0.0")
+            self.deepLTranslator = helper.get_deepl_translator(deeplAPIKey)
 
         self.targetLang = None
 

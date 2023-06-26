@@ -166,13 +166,8 @@ class MainWindow(QtWidgets.QDialog):
         # Initialize layout
         inactive_layout = QtWidgets.QGridLayout(self)
 
-        self.user = None
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        if apiKey is not None:
-            try:
-                self.user:elevenlabslib.ElevenLabsUser = elevenlabslib.ElevenLabsUser(apiKey)
-            except (ValueError, AttributeError):
-                pass
+        self.user: elevenlabslib.ElevenLabsUser = helper.get_xi_user(apiKey, exitOnFail=False)
 
         # First row
         self.your_output_lang = LabeledInput(

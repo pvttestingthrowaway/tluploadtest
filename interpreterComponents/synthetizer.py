@@ -1,8 +1,6 @@
 import queue
 import threading
 
-import elevenlabslib
-
 from utils import helper
 
 
@@ -11,7 +9,7 @@ class Synthesizer:
         self.eventQueue = queue.Queue()
         self.readyForPlaybackEvent = threading.Event()
         self.readyForPlaybackEvent.set()
-        self.user = elevenlabslib.ElevenLabsUser(apiKey)
+        self.user = helper.get_xi_user(apiKey)
         self.ttsVoice = None
 
         if isPlaceHolder:

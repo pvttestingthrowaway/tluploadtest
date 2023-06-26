@@ -1,6 +1,7 @@
 import copy
 import os
 import threading
+from typing import Optional
 
 import deepl as deepl
 import elevenlabslib
@@ -628,14 +629,21 @@ class ConfigDialog(LocalizedDialog):
     def __init__(self):
         super().__init__()
 
-        user = None
         self.setWindowTitle("Settings")
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        if apiKey is not None:
+        user = None
+        errorMessage = None
+        for i in range(3):
             try:
-                user = elevenlabslib.ElevenLabsUser(apiKey)
+                user: Optional[elevenlabslib.ElevenLabsUser] = elevenlabslib.ElevenLabsUser(apiKey)
             except ValueError:
-                pass
+                break
+            except AttributeError:
+                errorMessage = "Could not connect to the Elevenlabs API. Please try again later."
+
+        if errorMessage is not None:
+            helper.show_msgbox_and_exit(errorMessage)
+
         currentRow = 0
         self.layout = QtWidgets.QGridLayout(self)
 
@@ -851,14 +859,14 @@ class ConfigDialog(LocalizedDialog):
                 #Now we check the constraints depending on the API key.
                 if configKey == "elevenlabs_api_key":
                     if keyring.get_password("polyecho","elevenlabs_api_key") != value:
-                        try:
-                            user = elevenlabslib.ElevenLabsUser(value)
-                            if not user.get_voice_clone_available():
-                                msgBox = QtWidgets.QMessageBox()
-                                msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available."))
-                                msgBox.exec()
-                        except ValueError:
+                        user = helper.get_xi_user(apiKey=value, exitOnFail=False)
+                        if user is None:
                             errorMessage += "\nElevenLabs API error. API Key may be incorrect."
+                        elif not user.get_voice_clone_available():
+                            msgBox = QtWidgets.QMessageBox()
+                            msgBox.setText(helper.translate_ui_text("Your ElevenLabs subscription does not support voice cloning. \nSome features won't be available."))
+                            msgBox.exec()
+
 
                 if configKey == "openai_api_key":
                     if self.voice_recognition_type.get_value() == 1:
@@ -871,19 +879,14 @@ class ConfigDialog(LocalizedDialog):
 
                 if configKey == "deepl_api_key" and value != "":
                     if keyring.get_password("polyecho","deepl_api_key") != value:
-                        deeplTranslator = deepl.Translator(value).set_app_info("polyecho", "1.0.0")
-                        try:
-                            deeplTranslator.get_usage()
-                        except deepl.AuthorizationException:
+                        deeplTranslator = helper.get_deepl_translator(value, exitOnFail=False)
+                        if deeplTranslator is None:
                             errorMessage += "\nDeepL API error. API Key may be incorrect."
 
                 if configKey == "audo_api_key" and value != "":
                     if keyring.get_password("polyecho", "audo_api_key") != value:
-                        audoClient = NoiseRemovalClient(value)
-                        try:
-                            socket = audoClient.connect_websocket("TestID")
-                            socket.close()
-                        except websocket.WebSocketBadStatusException:
+                        audoClient = helper.get_audo_client(value, exitOnFail=False)
+                        if audoClient is None:
                             errorMessage += "\nAudo API error. API Key may be incorrect."
 
                 if configKey == "transcript_save_location":

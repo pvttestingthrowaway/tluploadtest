@@ -13,14 +13,16 @@ from audoai.noise_removal import NoiseRemovalClient
 
 from speech_recognition import AudioData
 
+from utils import helper
+
 requiredDuration = 180
 
 class Cloner:
     def __init__(self, cloneQueue, xiApikey, voiceName, audoApiKey=None):
         self.cloneQueue = cloneQueue
         self.voiceName = voiceName
-        self.user = ElevenLabsUser(xiApikey)
-        self.noiseRemoval = None if audoApiKey is None or audoApiKey == "" else NoiseRemovalClient(api_key=audoApiKey)
+        self.user = helper.get_xi_user(xiApikey)
+        self.noiseRemoval = None if audoApiKey is None or audoApiKey == "" else helper.get_audo_client(apiKey=audoApiKey, exitOnFail=True)
         self.interruptEvent = threading.Event()
         self.processedAudioQueue = queue.Queue()
         self.totalDuration:float = 0.0
