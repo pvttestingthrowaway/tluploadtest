@@ -21,7 +21,7 @@ import tracemalloc
 from PyQt6 import QtWidgets, QtGui
 from PyQt6.QtCore import QSize, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget, QSizePolicy, QMessageBox, QLabel
+from PyQt6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget, QSizePolicy, QMessageBox, QLabel, QProgressBar
 from srt import Subtitle
 
 import firstTimeSetup
@@ -73,6 +73,66 @@ class AudioButton(QPushButton):
                 label.setMaximumWidth(self.width())
 
 
+class DownloadMessageBox(QtWidgets.QDialog):
+    def __init__(self, text, url, location):
+        super().__init__()
+        self.setWindowTitle(helper.translate_ui_text('Download Progress'))
+        self.url = url
+        self.location = location
+        self.signalEmitter = SignalEmitter()
+        self.signalEmitter.signal.connect(lambda: self.done(0))
+        self.layout = QtWidgets.QVBoxLayout()
+        self.label = LocalizedCenteredLabel(text)
+        self.layout.addWidget(self.label)
+
+        self.progress = QProgressBar(self)
+        self.layout.addWidget(self.progress)
+
+        self.setLayout(self.layout)
+
+        self.download_thread = threading.Thread(target=self.download_file)
+
+    def download_file(self):
+        response = requests.get(self.url, stream=True)
+        total_size_in_bytes = response.headers.get('content-length')
+
+        if total_size_in_bytes is None:  # If 'content-length' is not found in headers
+            self.progress.setRange(0, 0)  # Set progress bar to indeterminate state
+        else:
+            total_size_in_bytes = int(total_size_in_bytes)
+            self.progress.setMaximum(100)
+
+        block_size = 1024  # 1 Kibibyte
+        progress_tracker = 0
+
+        try:
+            response.raise_for_status()
+            with open(self.location, 'wb') as file:
+                for data in response.iter_content(block_size):
+                    progress_tracker += len(data)
+                    file.write(data)
+                    if total_size_in_bytes is not None:  # Only update if 'content-length' was found
+                        self.update_progress_bar(progress_tracker, total_size_in_bytes)
+        except requests.exceptions.RequestException as e:
+            if os.path.exists(self.location):
+                os.remove(self.location)
+            raise
+        self.signalEmitter.signal.emit()
+
+    def finish(self):
+        self.done(0)
+    def update_progress_bar(self, progress_tracker, total_size_in_bytes):
+        percent_completed = (progress_tracker / total_size_in_bytes) * 100
+        self.progress.setValue(int(percent_completed))
+
+    def exec(self):
+        self.download_thread.start()
+        super().exec()
+
+    def show(self):
+        self.download_thread.start()
+        super().show()
+
 
 class MainWindow(QtWidgets.QDialog):
     def __init__(self, parent=None):
@@ -91,7 +151,7 @@ class MainWindow(QtWidgets.QDialog):
         self.activeLayout = QWidget()
         self.activeLayout.setLayout(self.init_active_state())
 
-        self.configDialog = ConfigDialog()
+        self.configDialog = None
         self.layout.addWidget(self.activeLayout)
         self.layout.addWidget(self.inactiveLayout)
         self.set_state("inactive")
@@ -130,8 +190,11 @@ class MainWindow(QtWidgets.QDialog):
 
         # Create circular buttons with icons
         self.micButton = AudioButton(helper.colors_dict['green'], QIcon('resources/microphone.png'), assignedLabels=micLabels)
+        self.micButton.setAccessibleName("Your mute button")
+        self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently not muted.")
         self.speakerButton = AudioButton(helper.colors_dict['yellow'], QIcon('resources/speaker.png'), assignedLabels=speakerLabels)
-
+        self.speakerButton.setAccessibleName("Their mute button")
+        self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently not muted.")
         self.reset_active_layout()
 
         # Create rectangular button
@@ -343,7 +406,16 @@ class MainWindow(QtWidgets.QDialog):
 
         messageBox = QMessageBox()
         messageBox.setWindowTitle(helper.translate_ui_text("Starting..."))
-        messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
+        runLocal = settings["voice_recognition_type"] == 0
+        if runLocal and "downloaded_models" not in settings:
+            settings["downloaded_models"] = []
+            helper.dump_settings()
+
+        if runLocal and settings["model_size"] not in settings["downloaded_models"]:
+            settings["downloaded_models"].append(settings["model_size"])
+            messageBox.setText(helper.translate_ui_text("Setting up interpreters. Downloading a whisper model, so this may a while..."))
+        else:
+            messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
         messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
         signalEmitter = SignalEmitter()
         signalEmitter.signal.connect(lambda: messageBox.done(0))
@@ -455,11 +527,15 @@ class MainWindow(QtWidgets.QDialog):
             print("Unpausing mic")
             self.micButton.setColor(helper.colors_dict['green'])
             self.yourInterpreter.detector_paused = False
+            self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently not muted.")
         else:
             #Not paused
             print("Pausing mic")
             self.micButton.setColor(helper.colors_dict['red'])
             self.yourInterpreter.detector_paused = True
+            self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently muted.")
+
+
 
 
     def speakerbutton_click(self):
@@ -469,11 +545,13 @@ class MainWindow(QtWidgets.QDialog):
             print("Unpausing speaker")
             self.speakerButton.setColor(self.speakerButton.getPreviousColor())
             self.theirInterpreter.synthetizer_paused = False
+            self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently not muted.")
         else:
             # Not paused
             print("Pausing speaker")
             self.speakerButton.setColor(helper.colors_dict['red'])
             self.theirInterpreter.synthetizer_paused = True
+            self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently muted.")
 
 
     def stop_clicked(self):
@@ -548,6 +626,9 @@ class MainWindow(QtWidgets.QDialog):
         oldSettings = copy.deepcopy(settings)
         oldXIKey = keyring.get_password("polyecho", "elevenlabs_api_key")
 
+        if self.configDialog is None:
+            self.configDialog = ConfigDialog()
+
         QTimer.singleShot(1, lambda: (self.configDialog.activateWindow(), self.configDialog.raise_()))
         self.configDialog.exec()
 
@@ -580,42 +661,33 @@ class MainWindow(QtWidgets.QDialog):
                 self.voicePicker.combo_box.setCurrentIndex(0)
 
 #Helper functions for ffmpeg download/extract
-def download_ffmpeg(urls, downloadDir, extractDir, currentOS):
-    message_box = QMessageBox()
-    message_box.setText(helper.translate_ui_text("Downloading FFmpeg. Please wait...", "default - syslang"))
-    message_box.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
-    signal_emitter = SignalEmitter()
-    signal_emitter.signal.connect(lambda: message_box.done(0))
-
-    def download_thread_fn():
-        for url in urls:
-            if currentOS == 'Windows':
-                fileName = url.split('/')[-1]
-            else:
-                fileName = url.split('/')[-2]
-                if fileName == "get":
-                    fileName = "ffmpeg"
-            downloadPath = os.path.join(downloadDir, f'{fileName}.zip')
-            try:
-                r = requests.get(url, stream=True)
-                with open(downloadPath, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=1024):
-                        if chunk:
-                            f.write(chunk)
-                extract_ffmpeg(downloadPath, extractDir)
-            except Exception as e:
-                print(e)
-                shutil.rmtree(extractDir)  # Clean up completely
-                signal_emitter.signal.emit()
-
-        shutil.rmtree(downloadDir, ignore_errors=True)  # Clean up
-        signal_emitter.signal.emit()
-
+def download_ffmpeg():
+    downloadDir = os.path.join(os.getcwd(), "ffmpeg-dl")
+    extractDir = os.path.join(os.getcwd(), 'ffmpeg-bin')
+    currentOS = platform.system()
     os.makedirs(downloadDir, exist_ok=True)
-    download_thread = threading.Thread(target=download_thread_fn)
-    download_thread.start()
-    QTimer.singleShot(1, lambda: (message_box.activateWindow(), message_box.raise_()))
-    message_box.exec()
+
+    if currentOS == 'Windows':
+        urls = ['https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip']
+    elif currentOS == 'Darwin':
+        urls = ['https://evermeet.cx/ffmpeg/get/zip', 'https://evermeet.cx/ffmpeg/get/ffprobe/zip', 'https://evermeet.cx/ffmpeg/get/ffplay/zip']
+    else:
+        raise Exception("Unsupported OS")
+
+    for url in urls:
+        if currentOS == 'Windows':
+            fileName = url.split('/')[-1]
+        else:
+            fileName = url.split('/')[-2]
+            if fileName == "get":
+                fileName = "ffmpeg"
+        if not fileName.endswith(".zip"):
+            fileName += ".zip"
+        downloadPath = os.path.join(downloadDir, fileName)
+        DownloadMessageBox(f"Downloading {fileName}",url,downloadPath).exec()
+        #Done with the download.
+        extract_ffmpeg(downloadPath, extractDir)
+
 
 def extract_ffmpeg(file_path, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -639,8 +711,11 @@ def main():
 
     app.setStyleSheet(styleSheet)
 
+    if "ui_language" not in settings:
+        settings["ui_language"] = "System language - syslang"
+
     try:
-        subprocess.check_output('ffmpeg -version', shell=True)
+        subprocess.check_output('ffmpeaag -version', shell=True)
     except subprocess.CalledProcessError:
         #ffmpeg is not in $PATH.
         currentOS = platform.system()
@@ -651,22 +726,12 @@ def main():
             message_box.exec()
             exit()
 
-
+        #Ensure the dir exists
         os.makedirs(os.path.join(os.getcwd(),"ffmpeg-bin"), exist_ok=True)
 
         if not os.path.exists(f"ffmpeg-bin/ffmpeg{'.exe' if currentOS == 'Windows' else ''}"):
             #It's not downloaded either. Download it.
-            downloadDir = os.path.join(os.getcwd(),"ffmpeg-dl")
-            extractDir = os.path.join(os.getcwd(), 'ffmpeg-bin')
-
-            if currentOS == 'Windows':
-                urls = ['https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip']
-            elif currentOS == 'Darwin':
-                urls = ['https://evermeet.cx/ffmpeg/get/zip', 'https://evermeet.cx/ffmpeg/get/ffprobe/zip', 'https://evermeet.cx/ffmpeg/get/ffplay/zip']
-            else:
-                raise Exception("Unsupported OS")
-
-            download_ffmpeg(urls, downloadDir, extractDir, currentOS)
+            download_ffmpeg()
             if not os.path.exists("ffmpeg-bin/ffmpeg.exe"):
                 raise Exception("Download failed! Please try again.")
 
@@ -692,8 +757,9 @@ def main():
     if len(missing_keys) > 0:
         firstTimeSetup.run_first_time_setup()
 
+
     dialog = MainWindow()
-    dialog.show()               #It crashes in debug mode with an access violation unless I put a breakpoint here. What the fuck?
+    dialog.show()
     dialog.activateWindow()
     dialog.raise_()
 
