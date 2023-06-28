@@ -72,9 +72,11 @@ class CenteredLabel(QLabel):
 
 class InfoButton(QtWidgets.QPushButton):
 
-    def __init__(self, info, isDir=False):
+    def __init__(self, info, parentLabel, isDir=False):
         super().__init__()
         self.info = helper.translate_ui_text(info)
+        self.setAccessibleName(helper.translate_ui_text(f"Info for {parentLabel}"))
+        self.setAccessibleDescription(helper.translate_ui_text("Opens a messagebox with information."))
         self.setStyleSheet("background-color: transparent;")
 
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -123,6 +125,7 @@ class LabeledInput(QtWidgets.QWidget):
 
         if isinstance(data, list):
             self.combo_box = QtWidgets.QComboBox()
+            self.combo_box.setAccessibleName(helper.translate_ui_text(f"{label} combobox"))
             if fixedComboBoxSize is not None:
                 self.combo_box.setMinimumContentsLength(fixedComboBoxSize)
                 self.combo_box.setSizeAdjustPolicy(self.combo_box.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -138,6 +141,7 @@ class LabeledInput(QtWidgets.QWidget):
             self.input_layout.addWidget(self.combo_box)
         else:
             self.line_edit = QtWidgets.QLineEdit()
+            self.line_edit.setAccessibleName(helper.translate_ui_text(f"{label} text input"))
             self.line_edit.setText(data)
             if protected:
                 self.line_edit.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
@@ -164,7 +168,7 @@ class LabeledInput(QtWidgets.QWidget):
         self.layout.addWidget(self.input_widget)
 
         if info is not None:
-            self.info_button = InfoButton(info, infoIsDir)
+            self.info_button = InfoButton(info, label, infoIsDir)
             self.input_layout.addWidget(self.info_button)
             if infoIsDir:
                 self.info_button.clicked.connect(self.select_file)
@@ -197,16 +201,21 @@ class ToggleButton(QtWidgets.QWidget):
 
         self.button1 = QtWidgets.QPushButton(button_texts[0])
         self.button1.clicked.connect(lambda: self.button_clicked(0, callbacks[0]))
+        self.button1.setAccessibleName(helper.translate_ui_text(f"{button_texts[0]} ({label} left button)"))
+        self.button1.setAccessibleDescription(helper.translate_ui_text(f"Left button of the {label} ToggleButton. Sets the UI state to {button_texts[0]} if it isn't already."))
 
         self.button2 = QtWidgets.QPushButton(button_texts[1])
         self.button2.clicked.connect(lambda: self.button_clicked(1, callbacks[1]))
+        self.button2.setAccessibleName(helper.translate_ui_text(f"{button_texts[1]} ({label} right button)"))
+        self.button2.setAccessibleDescription(helper.translate_ui_text(f"Right button of the {label} ToggleButton. Sets the UI state to {button_texts[1]} if it isn't already."))
 
         self.button_layout.addWidget(self.button1)
         self.button_layout.addWidget(self.button2)
         self.lower_layout = QHBoxLayout()
         self.lower_layout.addWidget(self.button_widget)
         self.lower_layout.setSpacing(0)
-
+        self.setAccessibleName(helper.translate_ui_text(f"{label} toggle button"))
+        self.setAccessibleDescription(helper.translate_ui_text("Contains two buttons which allow you to modify the state of the UI."))
         self.layout.addLayout(self.lower_layout, 1, 0, 1, 2)
         self.configKey = configKey
 
@@ -222,7 +231,7 @@ class ToggleButton(QtWidgets.QWidget):
             self.button_clicked(0, callbacks[0])
 
         if info is not None:
-            self.info_button = InfoButton(info)
+            self.info_button = InfoButton(info, label)
             self.lower_layout.addWidget(self.info_button)
 
     def show_info(self, info):
