@@ -8,7 +8,6 @@ import threading
 
 import faster_whisper
 import openai
-import torch
 from faster_whisper.transcribe import TranscriptionInfo
 
 
@@ -30,6 +29,7 @@ class Recognizer:
 
     def main_loop(self):
         while True:
+            wavBytes = None
             try:
                 print("Recognizer waiting...")
                 audioData = self.audioQueue.get(timeout=10)
@@ -46,16 +46,15 @@ class Recognizer:
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
                     del self.model  #This is just to ensure the allocated resources are free'd up correctly.
+                    import torch
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                     gc.collect()
                     return
 
-            #TODO (maybe): ADD SILERO-VAD HERE FOR FURTHER FILTERING.
-
             print("Running recognition...")
             if self.runLocal:
-                segments, info = self.model.transcribe(io.BytesIO(wavBytes), beam_size=5)
+                segments, info = self.model.transcribe(io.BytesIO(wavBytes), beam_size=5, vad_filter=True)
                 info:TranscriptionInfo
                 info:dict = dict(info._asdict())
             else:

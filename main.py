@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import threading
 import time
-from typing import Optional, TextIO
+from typing import Optional
 from zipfile import ZipFile
 
 import elevenlabslib
@@ -73,7 +73,7 @@ class AudioButton(QPushButton):
                 label.setMaximumWidth(self.width())
 
 
-class DownloadMessageBox(QtWidgets.QDialog):
+class DownloadDialog(QtWidgets.QDialog):
     def __init__(self, text, url, location):
         super().__init__()
         self.setWindowTitle(helper.translate_ui_text('Download Progress'))
@@ -684,7 +684,7 @@ def download_ffmpeg():
         if not fileName.endswith(".zip"):
             fileName += ".zip"
         downloadPath = os.path.join(downloadDir, fileName)
-        DownloadMessageBox(f"Downloading {fileName}",url,downloadPath).exec()
+        DownloadDialog(f"Downloading {fileName}", url, downloadPath).exec()
         #Done with the download.
         extract_ffmpeg(downloadPath, extractDir)
 
@@ -703,19 +703,14 @@ def extract_ffmpeg(file_path, output_dir):
 def main():
     tracemalloc.start()
     app = QApplication([])
-    styleSheetPath = "stylesheet.qss"
-    styleSheet = open(styleSheetPath,"r").read()
 
-    for colorKey, colorValue in helper.colors_dict.items():
-        styleSheet = styleSheet.replace("{"+colorKey+"}", colorValue)
-
-    app.setStyleSheet(styleSheet)
+    app.setStyleSheet(helper.get_stylesheet())
 
     if "ui_language" not in settings:
         settings["ui_language"] = "System language - syslang"
 
     try:
-        subprocess.check_output('ffmpeaag -version', shell=True)
+        subprocess.check_output('ffmpeg -version', shell=True)
     except subprocess.CalledProcessError:
         #ffmpeg is not in $PATH.
         currentOS = platform.system()
@@ -738,6 +733,23 @@ def main():
 
         #At this point the binary files for ffmpeg are in ffmpeg-bin in the current directory.
         os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(),"ffmpeg-bin")
+
+    #ffmpeg is installed and in path.
+    #Check torch.
+    try:
+        import torch
+        print("Torch imported successfully.")
+    except Exception:
+        print("Failed to import torch. Libraries must be missing. Do the pip jank.")
+        input("Move the files over then press enter. Placeholder for the pip stuff.")
+
+
+    try:
+        import torch
+        print("Torch imported successfully.")
+    except Exception:
+        print("Failed to import torch again.")
+        input("WTF?")
 
     #These are the keys I expect the config to have.
     expectedKeys  = [

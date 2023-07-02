@@ -18,8 +18,10 @@ from audoai.noise_removal import NoiseRemovalClient
 from elevenlabslib import ElevenLabsUser
 
 #The following is a pre-baked list of translated languages.
-langNamesPath = "utils/langnames.json"
-tlCachePath = "utils/tlcache.json"
+langNamesPath = "resources/langnames.json"
+tlCachePath = "tlcache.json"
+styleSheetPath = "resources/stylesheet.qss"
+
 translator = googletrans.Translator()
 with open(langNamesPath, "r") as fp:
     languages_translated = json.load(fp)
@@ -55,6 +57,12 @@ else:
         json.dump(tlCache, fp, indent=4, ensure_ascii=False)
 settings = dict()
 
+def get_stylesheet():
+    styleSheet = open(styleSheetPath, "r").read()
+
+    for colorKey, colorValue in colors_dict.items():
+        styleSheet = styleSheet.replace("{" + colorKey + "}", colorValue)
+    return styleSheet
 
 def reload_settings():
     global settings
