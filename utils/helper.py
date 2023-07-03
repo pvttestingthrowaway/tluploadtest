@@ -155,8 +155,6 @@ def tl_cache_prep(target_language):
 
     # Extract all the keys (UI text to be translated)
     untranslated = [ui_text for ui_text in tlCache.keys() if langCode not in tlCache[ui_text]]
-    if "Language Names" in untranslated:
-        untranslated.remove("Language Names")
     if len(untranslated) == 0:
         print("No text to translate. Return.")
         return
@@ -392,7 +390,7 @@ def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocali
     langString = "\n".join(langName for langName, langCode in langPairs)
 
 
-    langStringTL = translate_ui_text(langString, cacheKey="Language Names", languageOverride=languageToLocalizeIn)
+    langStringTL = translate_ui_text(langString, cacheKey="Language Names", languageOverride=languageToLocalizeIn, cacheSkip=True)
     langCode = languageToLocalizeIn.split(" - ")[1]
 
     # Split translated string back into individual language names and capitalize them if necessary
