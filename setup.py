@@ -1,5 +1,4 @@
 import fnmatch
-import os
 import shutil
 import subprocess
 import platform
@@ -8,13 +7,9 @@ from zipfile import ZipFile
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QMessageBox
-
-from utils import helper
-from utils.helper import settings
 from utils.customWidgets import *
 
 #Helper functions for ffmpeg download/extract
-
 def download_ffmpeg():
     downloadDir = os.path.join(os.getcwd(), "ffmpeg-dl")
     extractDir = os.path.join(os.getcwd(), 'ffmpeg-bin')

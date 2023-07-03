@@ -372,7 +372,18 @@ def get_supported_languages(user:ElevenLabsUser|None):
     if user is None:
         return []
     models = user.get_available_models()
+    nameList = [model["name"].lower() for model in models]
+    v2Model = None
+
+    for name in nameList:
+        if "multilingual_v2" in name:
+            v2Model = name
+
     for model in models:
+        if v2Model is not None and model["name"].lower() == v2Model:
+            # Found the multilingual v2 model
+            return [f"{language['name']} - {language['language_id']}" for language in model["languages"]]
+
         if "multilingual" in model["name"].lower():
             #Found the multilingual model
             return [f"{language['name']} - {language['language_id']}" for language in model["languages"]]

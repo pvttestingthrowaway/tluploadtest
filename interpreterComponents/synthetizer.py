@@ -1,5 +1,6 @@
 import queue
 import threading
+from elevenlabslib import GenerationOptions, PlaybackOptions
 
 from utils import helper
 
@@ -10,6 +11,15 @@ class Synthesizer:
         self.readyForPlaybackEvent = threading.Event()
         self.readyForPlaybackEvent.set()
         self.user = helper.get_xi_user(apiKey)
+        self.modelName = "eleven_multilingual_v1"
+
+        modelNames = [model["name"] for model in self.user.get_available_models()]
+        for name in modelNames:
+            if "multilingual_v2" in name.lower():
+                self.modelName = name
+
+        self.generationOptions = GenerationOptions(model_id=self.modelName, latencyOptimizationLevel=4, stability=0.5, similarity_boost=0.75)
+
         self.ttsVoice = None
 
         if isPlaceHolder:
@@ -58,12 +68,8 @@ class Synthesizer:
         if voice is None:
             voice = self.placeHolderVoice
 
-        voice.generate_stream_audio(prompt=prompt, portaudioDeviceID=self.outputDeviceInfo["index"],
-                                                streamInBackground=True,
-                                                onPlaybackStart=startcallbackfunc,
-                                                onPlaybackEnd=endcallbackfunc,
-                                                latencyOptimizationLevel=4,
-                                                model_id="eleven_multilingual_v1")
+        playbackOptions = PlaybackOptions(runInBackground=True, portaudioDeviceID=self.outputDeviceInfo["index"], onPlaybackStart=startcallbackfunc, onPlaybackEnd=endcallbackfunc)
+        voice.generate_stream_audio_v2(prompt=prompt, generationOptions=self.generationOptions, playbackOptions=playbackOptions)
 
     def waitForPlaybackReady(self):
         while True:
