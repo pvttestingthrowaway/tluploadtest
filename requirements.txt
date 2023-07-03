@@ -1,0 +1,28 @@
+#General prerequisites:
+wheel
+keyring~=24.2.0
+PyQt6~=6.5.1
+psutil~=5.9.5
+pycaw~=20230407; sys.platform == 'win32'
+comtypes~=1.2.0; sys.platform == 'win32'
+
+#Speech recognition:
+faster-whisper~=0.6.0
+openai~=0.27.8
+
+#Translation:
+deepl~=1.15.0
+googletrans~=4.0.0rc1
+httpcore~=0.9.1
+
+#Cloning:
+audoai-noise-removal~=1.4.0
+pydub~=0.25.1
+websocket-client~=1.6.1
+
+#Synthesizing:
+elevenlabslib~=0.10.0
+requests~=2.31.0
+
+#Transcription:
+srt~=3.5.3
