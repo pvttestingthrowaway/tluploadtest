@@ -482,9 +482,8 @@ def show_msgbox_and_exit(text, exitCode=1):
     msgBox = QtWidgets.QMessageBox()
     msgBox.setText(translate_ui_text(text))
     msgBox.exec()
-    exit(1)
+    exit(exitCode)
 
-#TODO: Remove this.
 def print_usage_info(codeID):
     print("===================RESOURCE USAGE STATS===================")
     print(codeID)
