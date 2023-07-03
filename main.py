@@ -27,111 +27,10 @@ from srt import Subtitle
 import firstTimeSetup
 from utils import helper
 from utils.helper import settings
+from utils.customWidgets import *
 
 from configWindow import LabeledInput, ConfigDialog, ToggleButton, CenteredLabel, LocalizedCenteredLabel, SignalEmitter
 from interpreter import Interpreter
-
-class AudioButton(QPushButton):
-    def __init__(self, bgColor, icon=None, assignedLabels:Optional[list]=None, *args, **kwargs):
-        super(AudioButton, self).__init__(*args, **kwargs)
-        self.bgColor = None
-        self.previousColor = None
-        self.assignedLabels = assignedLabels
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        sizePolicy.setHeightForWidth(True)
-        self.setSizePolicy(sizePolicy)
-        if icon is not None:
-            self.setIcon(icon)
-
-        self.setColor(bgColor)
-        self.bgColor = bgColor
-        self.previousColor = bgColor
-
-    def heightForWidth(self, width):
-        return width
-
-    def setColor(self, bgColor):
-        if self.bgColor != bgColor: #If it's the same, don't change anything.
-            self.previousColor = self.bgColor
-            self.bgColor = bgColor
-        size = min(self.width(), self.height())
-        self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor}; border :5px solid black;")
-
-    def getColor(self):
-        return self.bgColor
-
-    def getPreviousColor(self):
-        return self.previousColor
-
-    def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
-        size = min(self.width(), self.height())
-        self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor}; border :5px solid black;")
-        iconPadding = int(size/5)
-        self.setIconSize(QSize(size - iconPadding, size - iconPadding))
-        if self.assignedLabels is not None:
-            for label in self.assignedLabels:
-                label.setMaximumWidth(self.width())
-
-
-class DownloadDialog(QtWidgets.QDialog):
-    def __init__(self, text, url, location):
-        super().__init__()
-        self.setWindowTitle(helper.translate_ui_text('Download Progress'))
-        self.url = url
-        self.location = location
-        self.signalEmitter = SignalEmitter()
-        self.signalEmitter.signal.connect(lambda: self.done(0))
-        self.layout = QtWidgets.QVBoxLayout()
-        self.label = LocalizedCenteredLabel(text)
-        self.layout.addWidget(self.label)
-
-        self.progress = QProgressBar(self)
-        self.layout.addWidget(self.progress)
-
-        self.setLayout(self.layout)
-
-        self.download_thread = threading.Thread(target=self.download_file)
-
-    def download_file(self):
-        response = requests.get(self.url, stream=True)
-        total_size_in_bytes = response.headers.get('content-length')
-
-        if total_size_in_bytes is None:  # If 'content-length' is not found in headers
-            self.progress.setRange(0, 0)  # Set progress bar to indeterminate state
-        else:
-            total_size_in_bytes = int(total_size_in_bytes)
-            self.progress.setMaximum(100)
-
-        block_size = 1024  # 1 Kibibyte
-        progress_tracker = 0
-
-        try:
-            response.raise_for_status()
-            with open(self.location, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    progress_tracker += len(data)
-                    file.write(data)
-                    if total_size_in_bytes is not None:  # Only update if 'content-length' was found
-                        self.update_progress_bar(progress_tracker, total_size_in_bytes)
-        except requests.exceptions.RequestException as e:
-            if os.path.exists(self.location):
-                os.remove(self.location)
-            raise
-        self.signalEmitter.signal.emit()
-
-    def finish(self):
-        self.done(0)
-    def update_progress_bar(self, progress_tracker, total_size_in_bytes):
-        percent_completed = (progress_tracker / total_size_in_bytes) * 100
-        self.progress.setValue(int(percent_completed))
-
-    def exec(self):
-        self.download_thread.start()
-        super().exec()
-
-    def show(self):
-        self.download_thread.start()
-        super().show()
 
 
 class MainWindow(QtWidgets.QDialog):
@@ -413,6 +312,7 @@ class MainWindow(QtWidgets.QDialog):
 
         if runLocal and settings["model_size"] not in settings["downloaded_models"]:
             settings["downloaded_models"].append(settings["model_size"])
+            helper.dump_settings()
             messageBox.setText(helper.translate_ui_text("Setting up interpreters. Downloading a whisper model, so this may a while..."))
         else:
             messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
@@ -660,46 +560,6 @@ class MainWindow(QtWidgets.QDialog):
             else:
                 self.voicePicker.combo_box.setCurrentIndex(0)
 
-#Helper functions for ffmpeg download/extract
-def download_ffmpeg():
-    downloadDir = os.path.join(os.getcwd(), "ffmpeg-dl")
-    extractDir = os.path.join(os.getcwd(), 'ffmpeg-bin')
-    currentOS = platform.system()
-    os.makedirs(downloadDir, exist_ok=True)
-
-    if currentOS == 'Windows':
-        urls = ['https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip']
-    elif currentOS == 'Darwin':
-        urls = ['https://evermeet.cx/ffmpeg/get/zip', 'https://evermeet.cx/ffmpeg/get/ffprobe/zip', 'https://evermeet.cx/ffmpeg/get/ffplay/zip']
-    else:
-        raise Exception("Unsupported OS")
-
-    for url in urls:
-        if currentOS == 'Windows':
-            fileName = url.split('/')[-1]
-        else:
-            fileName = url.split('/')[-2]
-            if fileName == "get":
-                fileName = "ffmpeg"
-        if not fileName.endswith(".zip"):
-            fileName += ".zip"
-        downloadPath = os.path.join(downloadDir, fileName)
-        DownloadDialog(f"Downloading {fileName}", url, downloadPath).exec()
-        #Done with the download.
-        extract_ffmpeg(downloadPath, extractDir)
-
-
-def extract_ffmpeg(file_path, output_dir):
-    os.makedirs(output_dir, exist_ok=True)
-    with ZipFile(file_path, 'r') as zip_ref:
-        if platform.system() == 'Windows':
-            files_to_extract = [name for name in zip_ref.namelist() if '/bin/' in name and ".exe" in name]
-            for file in files_to_extract:
-                with zip_ref.open(file) as source, open(os.path.join(output_dir, os.path.basename(file)), 'wb') as target:
-                    shutil.copyfileobj(source, target)
-        else:
-            zip_ref.extractall(output_dir)
-
 def main():
     tracemalloc.start()
     app = QApplication([])
@@ -709,47 +569,6 @@ def main():
     if "ui_language" not in settings:
         settings["ui_language"] = "System language - syslang"
 
-    try:
-        subprocess.check_output('ffmpeg -version', shell=True)
-    except subprocess.CalledProcessError:
-        #ffmpeg is not in $PATH.
-        currentOS = platform.system()
-        if currentOS != "Windows" and currentOS != "Darwin":
-            message_box = QMessageBox()
-            message_box.setText("FFmpeg is missing, but your OS is not supported for auto-download. Please install it yourself.")
-            QTimer.singleShot(1, lambda: (message_box.activateWindow(), message_box.raise_()))
-            message_box.exec()
-            exit()
-
-        #Ensure the dir exists
-        os.makedirs(os.path.join(os.getcwd(),"ffmpeg-bin"), exist_ok=True)
-
-        if not os.path.exists(f"ffmpeg-bin/ffmpeg{'.exe' if currentOS == 'Windows' else ''}"):
-            #It's not downloaded either. Download it.
-            download_ffmpeg()
-            if not os.path.exists("ffmpeg-bin/ffmpeg.exe"):
-                raise Exception("Download failed! Please try again.")
-
-
-        #At this point the binary files for ffmpeg are in ffmpeg-bin in the current directory.
-        os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(),"ffmpeg-bin")
-
-    #ffmpeg is installed and in path.
-    #Check torch.
-    try:
-        import torch
-        print("Torch imported successfully.")
-    except Exception:
-        print("Failed to import torch. Libraries must be missing. Do the pip jank.")
-        input("Move the files over then press enter. Placeholder for the pip stuff.")
-
-
-    try:
-        import torch
-        print("Torch imported successfully.")
-    except Exception:
-        print("Failed to import torch again.")
-        input("WTF?")
 
     #These are the keys I expect the config to have.
     expectedKeys  = [
