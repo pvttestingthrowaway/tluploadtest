@@ -1,0 +1,57 @@
+* {
+    background-color: {primary_color};
+    color: {secondary_color};
+}
+
+QLabel {
+    color: {text_color};
+}
+
+QLineEdit {
+    background-color: {secondary_color};
+    color: {text_color};
+}
+
+QPushButton {
+    background-color: {secondary_color};
+    color: {text_color};
+}
+
+QPushButton:hover {
+    background-color: {hover_color};
+}
+
+QCheckBox::indicator:unchecked {
+    color: {hover_color};
+    background-color: {secondary_color};
+}
+
+QCheckBox::indicator:checked {
+    color: {hover_color};
+    background-color: {primary_color};
+}
+
+QComboBox {
+    background-color: {secondary_color};
+    color: {text_color};
+}
+
+QComboBox QAbstractItemView {
+    background-color: {secondary_color};
+    color: {text_color};
+}
+
+QMessageBox {
+    background-color: {primary_color};
+    color: {text_color};
+}
+
+QProgressBar {
+        border: 0px solid {hover_color};
+        text-align: center;
+        background-color: {secondary_color};
+        color: {text_color};
+}
+QProgressBar::chunk {
+    background-color: {toggle_color};
+}
