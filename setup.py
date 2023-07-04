@@ -6,6 +6,7 @@ import sys
 from zipfile import ZipFile
 
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from utils.customWidgets import *
 
@@ -52,6 +53,7 @@ def extract_ffmpeg(file_path, output_dir):
 
 def main():
     app = QApplication([])
+    app.setWindowIcon(QIcon('resources/icon.ico'))
 
     app.setStyleSheet(helper.get_stylesheet())
 
