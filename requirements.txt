@@ -7,6 +7,7 @@ pycaw>=20230407; sys.platform == 'win32'
 comtypes~=1.2.0; sys.platform == 'win32'
 
 #Speech recognition:
+SpeechRecognition~=3.10.0
 faster-whisper~=0.6.0
 openai~=0.27.8
 
