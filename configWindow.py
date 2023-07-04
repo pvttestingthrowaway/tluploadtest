@@ -13,7 +13,7 @@ from PyQt6.QtGui import QIcon
 from audoai.noise_removal import NoiseRemovalClient
 
 from utils import helper
-from utils.helper import settings
+from utils.helper import settings, resourcesDir
 
 from utils.customWidgets import *
 
@@ -514,7 +514,7 @@ class ConfigDialog(LocalizedDialog):
 
 def main():
     app = QtWidgets.QApplication([])
-    app.setWindowIcon(QIcon('resources/icon.ico'))
+    app.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
 
     dialog = ConfigDialog()
     dialog.show()

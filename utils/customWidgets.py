@@ -24,7 +24,7 @@ class StrSignalEmitter(QObject):
 class LocalizedDialog(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon('resources/icon.ico'))
+        self.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
         self.setWindowTitle("First time setup")
 
     def setWindowTitle(self, a0: str) -> None:
@@ -535,7 +535,7 @@ class DownloadDialog(QtWidgets.QDialog):
     def __init__(self, text, url, location):
         super().__init__()
         self.setWindowTitle(helper.translate_ui_text('Download Progress'))
-        self.setWindowIcon(QIcon('resources/icon.ico'))
+        self.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
         self.url = url
         self.location = location
         self.signalEmitter = SignalEmitter()

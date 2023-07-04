@@ -18,9 +18,10 @@ from audoai.noise_removal import NoiseRemovalClient
 from elevenlabslib import ElevenLabsUser
 
 #The following is a pre-baked list of translated languages.
-langNamesPath = "resources/langnames.json"
-tlCachePath = "tlcache.json"
-styleSheetPath = "resources/stylesheet.qss"
+resourcesDir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),"resources")
+langNamesPath = os.path.join(resourcesDir, "langnames.json")
+styleSheetPath = os.path.join(resourcesDir, "stylesheet.qss")
+tlCachePath =  os.path.join(resourcesDir, "tlcache.json")
 
 translator = googletrans.Translator()
 with open(langNamesPath, "r") as fp:

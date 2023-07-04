@@ -43,7 +43,7 @@ class MainWindow(QtWidgets.QDialog):
         self.yourInterpreter:Optional[Interpreter] = None
         self.theirInterpreter:Optional[Interpreter] = None
         self.layout = QGridLayout(self)
-        self.setWindowIcon(QIcon('resources/icon.ico'))
+        self.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
 
         self.inactiveLayout = QWidget()
         self.inactiveLayout.setLayout(self.init_inactive_state())
@@ -89,10 +89,10 @@ class MainWindow(QtWidgets.QDialog):
         speakerLabels = [self.activeLabels["them"]["recognized"], self.activeLabels["them"]["translated"], self.activeLabels["cloneProgress"]]
 
         # Create circular buttons with icons
-        self.micButton = AudioButton(helper.colors_dict['green'], QIcon('resources/microphone.png'), assignedLabels=micLabels)
+        self.micButton = AudioButton(helper.colors_dict['green'], QIcon(os.path.join(helper.resourcesDir,'microphone.png')), assignedLabels=micLabels)
         self.micButton.setAccessibleName("Your mute button")
         self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently not muted.")
-        self.speakerButton = AudioButton(helper.colors_dict['yellow'], QIcon('resources/speaker.png'), assignedLabels=speakerLabels)
+        self.speakerButton = AudioButton(helper.colors_dict['yellow'], QIcon(os.path.join(helper.resourcesDir,'speaker.png')), assignedLabels=speakerLabels)
         self.speakerButton.setAccessibleName("Their mute button")
         self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently not muted.")
         self.reset_active_layout()
@@ -564,7 +564,7 @@ class MainWindow(QtWidgets.QDialog):
 def main():
     tracemalloc.start()
     app = QApplication([])
-    app.setWindowIcon(QIcon('resources/icon.ico'))
+    app.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
 
     app.setStyleSheet(helper.get_stylesheet())
 
