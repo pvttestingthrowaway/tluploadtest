@@ -3,7 +3,7 @@ wheel
 keyring~=24.2.0
 PyQt6~=6.5.1
 psutil~=5.9.5
-pycaw~=20230407; sys.platform == 'win32'
+pycaw>=20230407; sys.platform == 'win32'
 comtypes~=1.2.0; sys.platform == 'win32'
 
 #Speech recognition:
