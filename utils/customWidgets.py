@@ -6,7 +6,7 @@ import keyring
 import requests
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import QPoint, QRect, Qt, QObject, pyqtSignal, QSize
-from PyQt6.QtGui import QPainter, QPen, QColor
+from PyQt6.QtGui import QPainter, QPen, QColor, QIcon
 from PyQt6.QtWidgets import QStyle, QStyleOptionSlider, QSlider, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFileDialog, QLineEdit, QCheckBox, QProgressBar, QSizePolicy, QPushButton
 
 from utils import helper
@@ -24,6 +24,7 @@ class StrSignalEmitter(QObject):
 class LocalizedDialog(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon('resources/icon.ico'))
         self.setWindowTitle("First time setup")
 
     def setWindowTitle(self, a0: str) -> None:
@@ -88,6 +89,7 @@ class InfoButton(QtWidgets.QPushButton):
 
     def show_info(self):
         msgBox = QtWidgets.QMessageBox()
+        msgBox.setWindowTitle(helper.translate_ui_text("Info"))
         msgBox.setTextFormat(Qt.TextFormat.RichText)
         msgBox.setText(self.info)
         msgBox.exec()
@@ -533,6 +535,7 @@ class DownloadDialog(QtWidgets.QDialog):
     def __init__(self, text, url, location):
         super().__init__()
         self.setWindowTitle(helper.translate_ui_text('Download Progress'))
+        self.setWindowIcon(QIcon('resources/icon.ico'))
         self.url = url
         self.location = location
         self.signalEmitter = SignalEmitter()

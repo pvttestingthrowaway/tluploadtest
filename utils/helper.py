@@ -58,7 +58,8 @@ else:
 settings = dict()
 
 def get_stylesheet():
-    styleSheet = open(styleSheetPath, "r").read()
+    with open(styleSheetPath, "r") as fp:
+        styleSheet = fp.read()
 
     for colorKey, colorValue in colors_dict.items():
         styleSheet = styleSheet.replace("{" + colorKey + "}", colorValue)

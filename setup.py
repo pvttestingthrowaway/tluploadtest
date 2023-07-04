@@ -105,4 +105,8 @@ def main():
     subprocess.call([sys.executable, 'polyEcho.py'])
 
 if __name__=="__main__":
+    if os.name == "nt":
+        import ctypes
+        myappid = u'lugia19.polyecho'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     main()

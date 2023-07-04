@@ -43,6 +43,7 @@ class MainWindow(QtWidgets.QDialog):
         self.yourInterpreter:Optional[Interpreter] = None
         self.theirInterpreter:Optional[Interpreter] = None
         self.layout = QGridLayout(self)
+        self.setWindowIcon(QIcon('resources/icon.ico'))
 
         self.inactiveLayout = QWidget()
         self.inactiveLayout.setLayout(self.init_inactive_state())
@@ -563,6 +564,7 @@ class MainWindow(QtWidgets.QDialog):
 def main():
     tracemalloc.start()
     app = QApplication([])
+    app.setWindowIcon(QIcon('resources/icon.ico'))
 
     app.setStyleSheet(helper.get_stylesheet())
 
@@ -605,4 +607,8 @@ def main():
         pass
 
 if __name__ == '__main__':
+    if os.name == "nt":
+        import ctypes
+        myappid = u'lugia19.polyecho'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     main()

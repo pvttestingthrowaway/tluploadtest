@@ -1,5 +1,6 @@
 import copy
 import os
+import sys
 import threading
 from typing import Optional
 
@@ -8,6 +9,7 @@ import elevenlabslib
 import keyring as keyring
 import openai
 import websocket
+from PyQt6.QtGui import QIcon
 from audoai.noise_removal import NoiseRemovalClient
 
 from utils import helper
@@ -512,6 +514,7 @@ class ConfigDialog(LocalizedDialog):
 
 def main():
     app = QtWidgets.QApplication([])
+    app.setWindowIcon(QIcon('resources/icon.ico'))
 
     dialog = ConfigDialog()
     dialog.show()
@@ -519,4 +522,8 @@ def main():
     app.exec()
 
 if __name__ == "__main__":
+    if os.name == "nt":
+        import ctypes
+        myappid = u'lugia19.polyecho'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     main()
