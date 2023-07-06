@@ -418,7 +418,7 @@ class TwoListSelection(QtWidgets.QWidget):
         self.mBtnMoveToSelected.setDisabled(not bool(self.selectedList.selectedItems()))
 
     def connections(self):
-        #TODO: Hook these functions to update the settings dict.
+        #Used to be a to do but got scrapped : Hook these functions to update the settings dict.
         self.availableList.itemSelectionChanged.connect(self.update_buttons_status)
         self.selectedList.itemSelectionChanged.connect(self.update_buttons_status)
         self.mBtnMoveToAvailable.clicked.connect(self.on_mBtnMoveToAvailable_clicked)

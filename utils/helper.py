@@ -447,7 +447,7 @@ def get_xi_user(apiKey, exitOnFail=True) -> Optional[elevenlabslib.ElevenLabsUse
         show_msgbox_and_exit(errorMessage)
 
     return None
-#TODO: Figure out the errors for timeouts.
+
 def get_deepl_translator(apiKey, exitOnFail=True) -> Optional[deepl.Translator]:
     errorMessage = ""
     for i in range(maxAPIRetries):
@@ -455,7 +455,7 @@ def get_deepl_translator(apiKey, exitOnFail=True) -> Optional[deepl.Translator]:
         try:
             deeplTranslator.get_usage()
             return deeplTranslator
-        except deepl.AuthorizationException:
+        except deepl.DeepLException:
             errorMessage = "\nDeepL API error. API Key may be incorrect."
 
     # We exhausted the tries without successfully getting the user.

@@ -7,7 +7,7 @@ import threading
 from typing import Optional
 
 import faster_whisper
-import speech_recognition as sr #TODO: Remember this has a pyaudio dependency.
+import speech_recognition as sr
 import openai
 
 from utils import helper

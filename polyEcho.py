@@ -292,7 +292,9 @@ class MainWindow(QtWidgets.QDialog):
         virtualDevices = helper.get_virtual_devices()
         yourVirtualOutput = virtualDevices["you"]["output"]
         theirVirtualInput = virtualDevices["them"]["input"]
-        theirVirtualInput = "Microphone (USB-MIC) - 5"
+
+        # TODO: remove this because it's only for testing
+        # theirVirtualInput = "Microphone (USB-MIC) - 5"
 
         if yourVirtualOutput is None or theirVirtualInput is None:
             msgBox = QtWidgets.QMessageBox()
@@ -314,7 +316,7 @@ class MainWindow(QtWidgets.QDialog):
         if runLocal and settings["model_size"] not in settings["downloaded_models"]:
             settings["downloaded_models"].append(settings["model_size"])
             helper.dump_settings()
-            messageBox.setText(helper.translate_ui_text("Setting up interpreters. Downloading a whisper model, so this may a while..."))
+            messageBox.setText(helper.translate_ui_text("Setting up interpreters. Downloading a whisper model, so this may take a long time..."))
         else:
             messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
         messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
@@ -324,7 +326,7 @@ class MainWindow(QtWidgets.QDialog):
         def interpreter_setup():
             self.yourInterpreter = Interpreter(settings["audio_input_device"], yourVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=yoursrSettings)
             helper.print_usage_info("After your interpreter")
-            # TODO: remove this because it's only for testing
+
             if cloneNew:
                 self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),
                                                     createNewVoice=True, srSettings=theirsrSettings)
