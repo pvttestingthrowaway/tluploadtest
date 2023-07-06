@@ -5,8 +5,10 @@ PyQt6~=6.5.1
 psutil~=5.9.5
 pycaw>=20230407; sys.platform == 'win32'
 comtypes~=1.2.0; sys.platform == 'win32'
+pynvml~=11.5.0;
 
 #Speech recognition:
+pyaudio~=0.2.13
 SpeechRecognition~=3.10.0
 faster-whisper~=0.6.0
 openai~=0.27.8
