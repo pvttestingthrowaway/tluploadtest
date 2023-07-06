@@ -127,11 +127,19 @@ class SetupDialog(LocalizedDialog):
             helper.dump_settings()
             return True
 
-    def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
-        if self.check_settings():
-            a0.accept()
+    def closeEvent(self, event):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            helper.translate_ui_text('Confirmation'),
+            helper.translate_ui_text('Are you sure you want to quit?'),
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+        )
+
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            exit()
         else:
-            a0.ignore()
+            event.ignore()
+
 class LanguageInput(SetupDialog):
     def __init__(self):
         super().__init__("Please choose the language to use for the application.")
