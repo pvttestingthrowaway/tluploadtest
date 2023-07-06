@@ -15,6 +15,7 @@ class SetupDialog(LocalizedDialog):
         self.gridLayout = QtWidgets.QGridLayout(self)
         self.promptLabel = LocalizedCenteredLabel(prompt, wordWrap=True)
         self.gridLayout.addWidget(self.promptLabel, 0, 0, 1, 3)
+        self.saveExit = False
 
         saveButton = QtWidgets.QPushButton(helper.translate_ui_text("Save"))
         saveButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
@@ -41,6 +42,7 @@ class SetupDialog(LocalizedDialog):
                     yield from self.iterate_widgets(child_layout)
 
     def save_clicked(self):
+        self.saveExit = True
         if self.check_settings():
             self.close()
     def check_settings(self):
@@ -128,17 +130,23 @@ class SetupDialog(LocalizedDialog):
             return True
 
     def closeEvent(self, event):
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            helper.translate_ui_text('Confirmation'),
-            helper.translate_ui_text('Are you sure you want to quit?'),
-            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
-        )
-
-        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            exit()
+        if self.saveExit:
+            if self.check_settings():
+                event.accept()
+            else:
+                event.ignore()
         else:
-            event.ignore()
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                helper.translate_ui_text('Confirmation'),
+                helper.translate_ui_text('Are you sure you want to quit?'),
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            )
+
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                exit()
+            else:
+                event.ignore()
 
 class LanguageInput(SetupDialog):
     def __init__(self):
