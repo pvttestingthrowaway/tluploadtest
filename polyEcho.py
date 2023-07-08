@@ -272,7 +272,7 @@ class MainWindow(QtWidgets.QDialog):
             settings["audio_output_device"] = "Default"
 
         if inputInfo is None or outputInfo is None:
-            with open("config.json", "w") as fp:
+            with open("config.json", "w", encoding="utf8") as fp:
                 json.dump(settings, fp, indent=4)
             msgBox = QtWidgets.QMessageBox()
             text = "Your "
@@ -365,7 +365,7 @@ class MainWindow(QtWidgets.QDialog):
             self.transcript["start"] = datetime.datetime.now()
             self.transcript["lock"] = threading.Lock()
             transcriptName = self.transcript["start"].strftime("%Y-%m-%d - %H.%M.%S.srt")
-            self.transcript["file"] = open(os.path.join(settings["transcript_save_location"],transcriptName),"w")
+            self.transcript["file"] = open(os.path.join(settings["transcript_save_location"],transcriptName),"w", encoding="utf8")
 
         self.yourInterpreter.begin_interpretation()
         #time.sleep(10)
@@ -508,7 +508,7 @@ class MainWindow(QtWidgets.QDialog):
             fileName = self.transcript["file"].name
             self.transcript["file"].close()
             if "subtitles" in self.transcript:
-                with open(fileName, "w") as fp:
+                with open(fileName, "w", encoding="utf8") as fp:
                     fp.write(srt.compose(self.transcript["subtitles"], reindex=True))
 
         self.transcript = None

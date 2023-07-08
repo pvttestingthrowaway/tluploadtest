@@ -24,7 +24,7 @@ styleSheetPath = os.path.join(resourcesDir, "stylesheet.qss")
 tlCachePath =  os.path.join(resourcesDir, "tlcache.json")
 
 translator = googletrans.Translator()
-with open(langNamesPath, "r") as fp:
+with open(langNamesPath, "r", encoding="utf8") as fp:
     languages_translated = json.load(fp)
 
 default_settings = {
@@ -50,16 +50,16 @@ colors_dict = {
 
 #Let's ensure that the tlCache exists and that we have a tlCache object.
 if os.path.exists(tlCachePath):
-    with open(tlCachePath, "r") as fp:
+    with open(tlCachePath, "r", encoding="utf8") as fp:
         tlCache = json.load(fp)
 else:
     tlCache = dict()
-    with open(tlCachePath, "w") as fp:
+    with open(tlCachePath, "w", encoding="utf8") as fp:
         json.dump(tlCache, fp, indent=4, ensure_ascii=False)
 settings = dict()
 
 def get_stylesheet():
-    with open(styleSheetPath, "r") as fp:
+    with open(styleSheetPath, "r", encoding="utf8") as fp:
         styleSheet = fp.read()
 
     for colorKey, colorValue in colors_dict.items():
@@ -69,15 +69,15 @@ def get_stylesheet():
 def reload_settings():
     global settings
     if os.path.exists("config.json"):
-        with open("config.json", "r") as fp:
+        with open("config.json", "r", encoding="utf8") as fp:
             settings = json.load(fp)
     else:
         settings = default_settings
-        with open("config.json", "w") as fp:
+        with open("config.json", "w", encoding="utf8") as fp:
             json.dump(settings, fp, indent=4)
 
 def dump_settings():
-    with open("config.json", "w") as fp:
+    with open("config.json", "w", encoding="utf8") as fp:
         json.dump(settings, fp, indent=4)
 
 reload_settings()
@@ -137,7 +137,7 @@ def get_googletrans_native_langnames(currentLang):
 
 
     if langCodesAdded:
-        with open(langNamesPath, "w") as fp:
+        with open(langNamesPath, "w", encoding="utf8") as fp:
             json.dump(languages_translated, fp, indent=4, ensure_ascii=False)
 
     sorted_langList = sorted(langList, key=lambda x: x.split(' - ')[0])
@@ -209,7 +209,7 @@ def tl_cache_prep(target_language):
             tlCache[ui_text][langCode] = translated_text
 
     # Save the updated data back to the JSON file
-    with open(tlCachePath, 'w') as f:
+    with open(tlCachePath, 'w', encoding="utf8") as f:
         json.dump(tlCache, f, ensure_ascii=False, indent=4)
 
 def translate_ui_text(text, cacheKey=None, cacheSkip=False, languageOverride=None):
@@ -264,7 +264,7 @@ def translate_ui_text(text, cacheKey=None, cacheSkip=False, languageOverride=Non
     translatedText = translatedText.strip()
 
     if cacheUpdated and not cacheSkip:
-        with open(tlCachePath, "w") as fp:
+        with open(tlCachePath, "w", encoding="utf8") as fp:
             json.dump(tlCache, fp, indent=4, ensure_ascii=False)
 
 
