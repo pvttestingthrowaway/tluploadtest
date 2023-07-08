@@ -1,5 +1,7 @@
 import os
+import sys
 import threading
+import time
 from typing import Optional
 
 import keyring
@@ -20,6 +22,10 @@ class SignalEmitter(QObject):
 class StrSignalEmitter(QObject):
     #Just a dummy helper class for arbitrary signals.
     signal = pyqtSignal(str)
+
+class IntSignalEmitter(QObject):
+    #Just a dummy helper class for arbitrary signals.
+    signal = pyqtSignal(int)
 
 class LocalizedDialog(QtWidgets.QDialog):
     def __init__(self):
@@ -531,63 +537,134 @@ class AudioButton(QPushButton):
             for label in self.assignedLabels:
                 label.setMaximumWidth(self.width())
 
-class DownloadDialog(QtWidgets.QDialog):
-    def __init__(self, text, url, location):
+def format_eta(seconds) -> str:
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{int(hours)}h {int(minutes)}m"
+    elif minutes:
+        return f"{int(minutes)}m {int(seconds)}s"
+    else:
+        return f"{int(seconds)}s"
+
+class DownloadThread(QtCore.QThread):
+    setProgressBarTotalSignal = QtCore.pyqtSignal(int)
+    updateProgressSignal = QtCore.pyqtSignal(int)
+    labelTextSignal = QtCore.pyqtSignal(int)
+    doneSignal = QtCore.pyqtSignal()
+
+    def __init__(self, url, location):
         super().__init__()
-        self.setWindowTitle(helper.translate_ui_text('Download Progress'))
-        self.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
         self.url = url
         self.location = location
-        self.signalEmitter = SignalEmitter()
-        self.signalEmitter.signal.connect(lambda: self.done(0))
-        self.layout = QtWidgets.QVBoxLayout()
-        self.label = LocalizedCenteredLabel(text)
-        self.layout.addWidget(self.label)
 
-        self.progress = QProgressBar(self)
-        self.layout.addWidget(self.progress)
-
-        self.setLayout(self.layout)
-
-        self.download_thread = threading.Thread(target=self.download_file)
-
-    def download_file(self):
+    def run(self):
         response = requests.get(self.url, stream=True)
         total_size_in_bytes = response.headers.get('content-length')
 
         if total_size_in_bytes is None:  # If 'content-length' is not found in headers
-            self.progress.setRange(0, 0)  # Set progress bar to indeterminate state
+            self.setProgressBarTotalSignal.emit(-1)  # Set progress bar to indeterminate state
         else:
             total_size_in_bytes = int(total_size_in_bytes)
-            self.progress.setMaximum(100)
+            self.setProgressBarTotalSignal.emit(total_size_in_bytes)
 
-        block_size = 1024  # 1 Kibibyte
-        progress_tracker = 0
-
+        block_size = 1024 * 16
+        print(-1)
         try:
             response.raise_for_status()
-            with open(self.location, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    progress_tracker += len(data)
-                    file.write(data)
-                    if total_size_in_bytes is not None:  # Only update if 'content-length' was found
-                        self.update_progress_bar(progress_tracker, total_size_in_bytes)
+            file = open(self.location, 'wb')
+
+            start_time = time.time()
+            total_data_received = 0
+            last_emit_time = start_time  # Initialize last_emit_time to start_time
+            data_received_since_last_emit = 0
+
+            for data in response.iter_content(block_size):
+                total_data_received += len(data)
+                data_received_since_last_emit += len(data)
+
+                file.write(data)
+                if total_size_in_bytes is not None:  # Only update if 'content-length' was found
+                    current_time = time.time()
+                    if current_time - last_emit_time >= 1:
+                        elapsed_time_since_last_emit = current_time - last_emit_time
+                        download_speed = data_received_since_last_emit / elapsed_time_since_last_emit
+                        print(f"Download speed: {download_speed / 1024 / 1024:.2f} MBps")
+
+                        # Calculate ETA
+                        remaining_data = total_size_in_bytes - total_data_received
+                        if download_speed != 0:  # Avoid division by zero
+                            eta = int(remaining_data / download_speed)
+                            print(f"ETA: {eta} seconds")
+                            self.labelTextSignal.emit(eta)
+                        self.updateProgressSignal.emit(int((total_data_received / total_size_in_bytes) * 100))
+                        # Reset tracking variables for the next X seconds
+                        last_emit_time = current_time  # Update last_emit_time
+                        data_received_since_last_emit = 0  # Reset data_received_since_last_emit
+
+            file.flush()
+            file.close()
+
         except requests.exceptions.RequestException as e:
+            print(e)
             if os.path.exists(self.location):
                 os.remove(self.location)
             raise
-        self.signalEmitter.signal.emit()
 
-    def finish(self):
-        self.done(0)
-    def update_progress_bar(self, progress_tracker, total_size_in_bytes):
-        percent_completed = (progress_tracker / total_size_in_bytes) * 100
-        self.progress.setValue(int(percent_completed))
+        self.doneSignal.emit()
 
-    def exec(self):
+
+class DownloadDialog(QtWidgets.QDialog):
+    def __init__(self, baseLabelText, url, location):
+        super().__init__()
+        self.setWindowTitle(helper.translate_ui_text('Download'))
+        self.previous_percent_completed = -1
+
+        self.download_thread = DownloadThread(url, location)
+
+        self.download_thread.setProgressBarTotalSignal.connect(self.set_progress_bar)
+        self.download_thread.doneSignal.connect(lambda: self.done(0))
+        self.download_thread.labelTextSignal.connect(self.set_eta)
+        self.download_thread.updateProgressSignal.connect(self.update_progress_bar)
+
+        self.layout = QtWidgets.QVBoxLayout()
+        self.baseLabelText = helper.translate_ui_text(baseLabelText)
+        self.label = QtWidgets.QLabel(self.baseLabelText)
+
+        self.layout.addWidget(self.label)
+        self.progress = QtWidgets.QProgressBar(self)
+        self.layout.addWidget(self.progress)
+        self.setLayout(self.layout)
+
+    def set_eta(self, ETASeconds):
+        self.label.setText(f"{self.baseLabelText} ({format_eta(ETASeconds)})")
+
+    def set_progress_bar(self, amount):
+        if amount == -1:
+            self.progress.setRange(0, 0)
+        else:
+            self.progress.setMaximum(100)
+
+    def update_progress_bar(self, percent_completed):
+        if percent_completed != self.previous_percent_completed:
+            self.progress.setValue(percent_completed)
+            self.previous_percent_completed = percent_completed
+
+    def showEvent(self, event):
+        super().showEvent(event)
         self.download_thread.start()
-        super().exec()
 
-    def show(self):
-        self.download_thread.start()
-        super().show()
+    def closeEvent(self, event):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            helper.translate_ui_text('Confirmation'),
+            helper.translate_ui_text('Are you sure you want to quit?'),
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+        )
+
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.download_thread.terminate()
+            event.accept()
+            sys.exit(0)
+        else:
+            event.ignore()
