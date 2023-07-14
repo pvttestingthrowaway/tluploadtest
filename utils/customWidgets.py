@@ -7,36 +7,33 @@ from typing import Optional
 import keyring
 import requests
 from PyQt6 import QtWidgets, QtCore, QtGui
-from PyQt6.QtCore import QPoint, QRect, Qt, QObject, pyqtSignal, QSize
-from PyQt6.QtGui import QPainter, QPen, QColor, QIcon
-from PyQt6.QtWidgets import QStyle, QStyleOptionSlider, QSlider, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFileDialog, QLineEdit, QCheckBox, QProgressBar, QSizePolicy, QPushButton
 
 from utils import helper
 from utils.helper import settings
 
 
-class SignalEmitter(QObject):
+class SignalEmitter(QtCore.QObject):
     #Just a dummy helper class for arbitrary signals.
-    signal = pyqtSignal()
+    signal = QtCore.pyqtSignal()
 
-class StrSignalEmitter(QObject):
+class StrSignalEmitter(QtCore.QObject):
     #Just a dummy helper class for arbitrary signals.
-    signal = pyqtSignal(str)
+    signal = QtCore.pyqtSignal(str)
 
-class IntSignalEmitter(QObject):
+class IntSignalEmitter(QtCore.QObject):
     #Just a dummy helper class for arbitrary signals.
-    signal = pyqtSignal(int)
+    signal = QtCore.pyqtSignal(int)
 
 class LocalizedDialog(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
+        self.setWindowIcon(QtGui.QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
         self.setWindowTitle("First time setup")
 
     def setWindowTitle(self, a0: str) -> None:
         super().setWindowTitle(helper.translate_ui_text(a0))
 
-class LocalizedCheckbox(QCheckBox):
+class LocalizedCheckbox(QtWidgets.QCheckBox):
     def __init__(self, configKey, text=None, cacheSkip=False):
         super(LocalizedCheckbox, self).__init__(helper.translate_ui_text(text, cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
@@ -52,7 +49,7 @@ class LocalizedCheckbox(QCheckBox):
         return self.isChecked()
 
 
-class LocalizedLabel(QLabel):
+class LocalizedLabel(QtWidgets.QLabel):
     def __init__(self, text=None, cacheSkip=False):
         super(LocalizedLabel, self).__init__(helper.translate_ui_text(text, cacheSkip=cacheSkip))
         self.cacheSkip = cacheSkip
@@ -63,13 +60,13 @@ class LocalizedLabel(QLabel):
 class LocalizedCenteredLabel(LocalizedLabel):
     def __init__(self, text=None, cacheSkip=False, wordWrap=False):
         super(LocalizedCenteredLabel, self).__init__(text, cacheSkip=cacheSkip)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.setWordWrap(wordWrap)
 
-class CenteredLabel(QLabel):
+class CenteredLabel(QtWidgets.QLabel):
     def __init__(self, text=None, wordWrap=False):
         super(CenteredLabel, self).__init__(text)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.setWordWrap(wordWrap)
 
 class InfoButton(QtWidgets.QPushButton):
@@ -96,7 +93,7 @@ class InfoButton(QtWidgets.QPushButton):
     def show_info(self):
         msgBox = QtWidgets.QMessageBox()
         msgBox.setWindowTitle(helper.translate_ui_text("Info"))
-        msgBox.setTextFormat(Qt.TextFormat.RichText)
+        msgBox.setTextFormat(QtCore.Qt.TextFormat.RichText)
         msgBox.setText(self.info)
         msgBox.exec()
 
@@ -147,7 +144,7 @@ class LabeledInput(QtWidgets.QWidget):
             self.line_edit.setAccessibleName(helper.translate_ui_text(f"{label} text input"))
             self.line_edit.setText(data)
             if protected:
-                self.line_edit.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
+                self.line_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.PasswordEchoOnEdit)
 
             self.input_layout.addWidget(self.line_edit)
 
@@ -177,7 +174,7 @@ class LabeledInput(QtWidgets.QWidget):
                 self.info_button.clicked.connect(self.select_file)
 
     def select_file(self):
-        self.line_edit.setText(str(QFileDialog.getExistingDirectory(self, "Select Directory")))
+        self.line_edit.setText(str(QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory")))
 
     def get_value(self):
         if self.line_edit is not None:
@@ -214,7 +211,7 @@ class ToggleButton(QtWidgets.QWidget):
 
         self.button_layout.addWidget(self.button1)
         self.button_layout.addWidget(self.button2)
-        self.lower_layout = QHBoxLayout()
+        self.lower_layout = QtWidgets.QHBoxLayout()
         self.lower_layout.addWidget(self.button_widget)
         self.lower_layout.setSpacing(0)
         self.setAccessibleName(helper.translate_ui_text(f"{label} toggle button"))
@@ -252,8 +249,8 @@ class ToggleButton(QtWidgets.QWidget):
         return self.selected_button
 
 #Code taken from https://gist.github.com/wiccy46/b7d8a1d57626a4ea40b19c5dbc5029ff
-class LabeledSlider(QWidget):
-    def __init__(self, minimum, maximum, configKey, interval=1, orientation=Qt.Orientation.Horizontal,
+class LabeledSlider(QtWidgets.QWidget):
+    def __init__(self, minimum, maximum, configKey, interval=1, orientation=QtCore.Qt.Orientation.Horizontal,
                  labels=None, defaultPosition=0, parent=None):
         super(LabeledSlider, self).__init__(parent=parent)
 
@@ -269,10 +266,10 @@ class LabeledSlider(QWidget):
         else:
             self.levels=list(zip(levels,map(str,levels)))
 
-        if orientation==Qt.Orientation.Horizontal:
-            self.layout=QVBoxLayout(self)
-        elif orientation==Qt.Orientation.Vertical:
-            self.layout=QHBoxLayout(self)
+        if orientation==QtCore.Qt.Orientation.Horizontal:
+            self.layout=QtWidgets.QVBoxLayout(self)
+        elif orientation==QtCore.Qt.Orientation.Vertical:
+            self.layout=QtWidgets.QHBoxLayout(self)
         else:
             raise Exception("<orientation> wrong.")
 
@@ -285,7 +282,7 @@ class LabeledSlider(QWidget):
         self.layout.setContentsMargins(self.left_margin,self.top_margin,
                 self.right_margin,self.bottom_margin)
 
-        self.sl=QSlider(orientation, self)
+        self.sl=QtWidgets.QSlider(orientation, self)
         self.sl.setMinimum(minimum)
         self.sl.setMaximum(maximum)
         self.sl.setValue(minimum)
@@ -293,11 +290,11 @@ class LabeledSlider(QWidget):
             self.sl.setSliderPosition(settings[configKey])
         else:
             self.sl.setSliderPosition(defaultPosition)
-        if orientation==Qt.Orientation.Horizontal:
-            self.sl.setTickPosition(QSlider.TickPosition.TicksBelow)
+        if orientation==QtCore.Qt.Orientation.Horizontal:
+            self.sl.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
             self.sl.setMinimumWidth(300) # just to make it easier to read
         else:
-            self.sl.setTickPosition(QSlider.TickPosition.TicksLeft)
+            self.sl.setTickPosition(QtWidgets.QSlider.TickPosition.TicksLeft)
             self.sl.setMinimumHeight(300) # just to make it easier to read
         self.sl.setTickInterval(interval)
         self.sl.setSingleStep(1)
@@ -311,26 +308,26 @@ class LabeledSlider(QWidget):
 
         super(LabeledSlider,self).paintEvent(e)
         style=self.sl.style()
-        painter=QPainter(self)
-        pen = QPen()
-        pen.setColor(QColor(helper.colors_dict["text_color"]))
+        painter=QtGui.QPainter(self)
+        pen = QtGui.QPen()
+        pen.setColor(QtGui.QColor(helper.colors_dict["text_color"]))
         painter.setPen(pen)
-        st_slider=QStyleOptionSlider()
+        st_slider=QtWidgets.QStyleOptionSlider()
         st_slider.initFrom(self.sl)
         st_slider.orientation=self.sl.orientation()
-        length=style.pixelMetric(QStyle.PixelMetric.PM_SliderLength, st_slider, self.sl)
-        available=style.pixelMetric(QStyle.PixelMetric.PM_SliderSpaceAvailable, st_slider, self.sl)
+        length=style.pixelMetric(QtWidgets.QStyle.PixelMetric.PM_SliderLength, st_slider, self.sl)
+        available=style.pixelMetric(QtWidgets.QStyle.PixelMetric.PM_SliderSpaceAvailable, st_slider, self.sl)
 
         for v, v_str in self.levels:
 
             # get the size of the label
 
-            rect=painter.drawText(QRect(), Qt.TextFlag.TextDontPrint, v_str)
+            rect=painter.drawText(QtCore.QRect(), QtCore.Qt.TextFlag.TextDontPrint, v_str)
 
-            if self.sl.orientation()==Qt.Orientation.Horizontal:
+            if self.sl.orientation()==QtCore.Qt.Orientation.Horizontal:
                 # I assume the offset is half the length of slider, therefore
                 # + length//2
-                x_loc=QStyle.sliderPositionFromValue(self.sl.minimum(),
+                x_loc=QtWidgets.QStyle.sliderPositionFromValue(self.sl.minimum(),
                         self.sl.maximum(), v, available)+length//2
 
                 # left bound of the text = center - half of text width + L_margin
@@ -355,7 +352,7 @@ class LabeledSlider(QWidget):
                             self.bottom_margin)
 
             else:
-                y_loc=QStyle.sliderPositionFromValue(self.sl.minimum(),
+                y_loc=QtWidgets.QStyle.sliderPositionFromValue(self.sl.minimum(),
                         self.sl.maximum(), v, available, upsideDown=True)
 
                 bottom=y_loc+length//2+rect.height()//2+self.top_margin-5
@@ -368,7 +365,7 @@ class LabeledSlider(QWidget):
                             self.top_margin, self.right_margin,
                             self.bottom_margin)
 
-            pos=QPoint(left, bottom)
+            pos=QtCore.QPoint(left, bottom)
             painter.drawText(pos, v_str)
 
         return
@@ -475,7 +472,7 @@ class TwoListSelection(QtWidgets.QWidget):
 
         for item in items:
             itemExists = False
-            items_list = self.availableList.findItems(item, Qt.MatchFlag.MatchExactly)
+            items_list = self.availableList.findItems(item, QtCore.Qt.MatchFlag.MatchExactly)
             for listItem in items_list:
                 self.availableList.takeItem(self.availableList.row(listItem))
                 itemExists = True
@@ -496,13 +493,13 @@ class TwoListSelection(QtWidgets.QWidget):
             r.append(it.text())
         return r
 
-class AudioButton(QPushButton):
+class AudioButton(QtWidgets.QPushButton):
     def __init__(self, bgColor, icon=None, assignedLabels:Optional[list]=None, *args, **kwargs):
         super(AudioButton, self).__init__(*args, **kwargs)
         self.bgColor = None
         self.previousColor = None
         self.assignedLabels = assignedLabels
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred)
         sizePolicy.setHeightForWidth(True)
         self.setSizePolicy(sizePolicy)
         if icon is not None:
@@ -532,7 +529,7 @@ class AudioButton(QPushButton):
         size = min(self.width(), self.height())
         self.setStyleSheet(f"border-radius : {int(size / 2)}; background-color: {self.bgColor}; border :5px solid black;")
         iconPadding = int(size/5)
-        self.setIconSize(QSize(size - iconPadding, size - iconPadding))
+        self.setIconSize(QtCore.QSize(size - iconPadding, size - iconPadding))
         if self.assignedLabels is not None:
             for label in self.assignedLabels:
                 label.setMaximumWidth(self.width())

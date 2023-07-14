@@ -4,12 +4,12 @@ import io
 import os
 import platform
 import queue
+import sys
 import threading
 
 import faster_whisper
 import openai
 from faster_whisper.transcribe import TranscriptionInfo
-
 
 class Recognizer:
 
@@ -18,6 +18,7 @@ class Recognizer:
 
         if self.runLocal:
             if platform.system() == "Linux" or platform.system() == "Windows":
+                #TODO: Shove the download in some kind of subclass of DownloadDialog so that it runs when a model size is picked instead.
                 self.model = faster_whisper.WhisperModel(modelSize, device="auto", compute_type="float16")
             else:
                 self.model = faster_whisper.WhisperModel(modelSize, device="auto")
