@@ -65,9 +65,10 @@ class MainWindow(QtWidgets.QDialog):
     def reset_active_layout(self):
         self.activeLabels["you"]["recognized"].setText(helper.translate_ui_text("Your recognized text"))
         self.activeLabels["you"]["translated"].setText(helper.translate_ui_text("Your translated text"))
+        self.activeLabels["you"]["info"].setText("Click to mute yourself")
         self.activeLabels["them"]["recognized"].setText(helper.translate_ui_text("Their recognized text"))
         self.activeLabels["them"]["translated"].setText(helper.translate_ui_text("Their translated text"))
-
+        self.activeLabels["them"]["info"].setText("Click to mute them")
         self.activeLabels["cloneProgress"].setText("Cloning progress...")
         self.micButton.setColor(helper.colors_dict['green'])
 
@@ -80,8 +81,11 @@ class MainWindow(QtWidgets.QDialog):
         self.activeLabels["them"] = dict()
         self.activeLabels["you"]["recognized"] = CenteredLabel(wordWrap=True)
         self.activeLabels["you"]["translated"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["you"]["info"] = LocalizedCenteredLabel("Click to mute yourself")
+
         self.activeLabels["them"]["recognized"] = CenteredLabel(wordWrap=True)
         self.activeLabels["them"]["translated"] = CenteredLabel(wordWrap=True)
+        self.activeLabels["them"]["info"] = LocalizedCenteredLabel("Click to mute them")
         self.activeLabels["cloneProgress"] = LocalizedCenteredLabel(cacheSkip=True, wordWrap=True)
 
 
@@ -103,24 +107,36 @@ class MainWindow(QtWidgets.QDialog):
         self.stop_button.clicked.connect(self.stop_clicked)
 
 
+        self.micButton.clicked.connect(self.micbutton_click)
+        self.speakerButton.clicked.connect(self.speakerbutton_click)
 
         # Set active layout
-        active_layout.addWidget(self.activeLabels["you"]["recognized"], 0, 0)
-        active_layout.addWidget(self.activeLabels["them"]["recognized"], 0, 2)
-        active_layout.addWidget(self.micButton, 1, 0)
-
-        active_layout.addWidget(self.speakerButton, 1, 2)
-        active_layout.addWidget(self.activeLabels["you"]["translated"], 2, 0)
-        active_layout.addWidget(self.activeLabels["them"]["translated"], 2, 2)
-        active_layout.addWidget(self.stop_button, 3, 1)
-        active_layout.addWidget(self.activeLabels["cloneProgress"], 3, 2)
+        currentRow = 0
+        active_layout.addWidget(self.activeLabels["you"]["recognized"], currentRow, 0)
+        active_layout.addWidget(self.activeLabels["them"]["recognized"], currentRow, 2)
+        currentRow += 1
+        active_layout.addWidget(self.micButton, currentRow, 0)
+        active_layout.addWidget(self.speakerButton, currentRow, 2)
+        currentRow += 1
+        active_layout.addWidget(self.activeLabels["you"]["info"], currentRow, 0)
+        active_layout.addWidget(self.activeLabels["them"]["info"], currentRow, 2)
+        currentRow += 1
+        spacerItem = QtWidgets.QSpacerItem(20, 25, QtWidgets.QSizePolicy.Policy.Expanding,
+                                           QtWidgets.QSizePolicy.Policy.Minimum)
+        active_layout.addItem(spacerItem, currentRow, 0, 3, 1)
+        currentRow += 1
+        active_layout.addWidget(self.activeLabels["you"]["translated"], currentRow, 0)
+        active_layout.addWidget(self.activeLabels["them"]["translated"], currentRow, 2)
+        currentRow += 1
+        active_layout.addWidget(self.stop_button, currentRow, 1)
+        active_layout.addWidget(self.activeLabels["cloneProgress"], currentRow, 2)
 
 
 
         for i in range(3):
             active_layout.setColumnStretch(i, 1)
 
-        for i in range(4):
+        for i in range(currentRow):
             active_layout.setRowStretch(i, 1)
 
         return active_layout
@@ -348,9 +364,6 @@ class MainWindow(QtWidgets.QDialog):
         self.yourInterpreter.textReadySignal.connect(lambda signalData: self.setSpeechLabelsText("you", signalData))
         self.theirInterpreter.textReadySignal.connect(lambda signalData: self.setSpeechLabelsText("them", signalData))
 
-        self.micButton.clicked.connect(self.micbutton_click)
-        self.speakerButton.clicked.connect(self.speakerbutton_click)
-
         if settings["transcription_storage"] == 0:
             self.transcript = dict()
             self.transcript["start"] = datetime.datetime.now()
@@ -419,12 +432,14 @@ class MainWindow(QtWidgets.QDialog):
         if self.micButton.getColor() == helper.colors_dict['red']:
             #Already paused
             print("Unpausing mic")
+            self.activeLabels["you"]["info"].setText("Click to mute yourself")
             self.micButton.setColor(helper.colors_dict['green'])
             self.yourInterpreter.detector_paused = False
             self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently not muted.")
         else:
             #Not paused
             print("Pausing mic")
+            self.activeLabels["you"]["info"].setText("Click to unmute yourself")
             self.micButton.setColor(helper.colors_dict['red'])
             self.yourInterpreter.detector_paused = True
             self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently muted.")
@@ -437,12 +452,14 @@ class MainWindow(QtWidgets.QDialog):
         if self.speakerButton.getColor() == helper.colors_dict['red']:
             # Already paused
             print("Unpausing speaker")
+            self.activeLabels["them"]["info"].setText("Click to mute them")
             self.speakerButton.setColor(self.speakerButton.getPreviousColor())
             self.theirInterpreter.synthetizer_paused = False
             self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently not muted.")
         else:
             # Not paused
             print("Pausing speaker")
+            self.activeLabels["them"]["info"].setText("Click to unmute them")
             self.speakerButton.setColor(helper.colors_dict['red'])
             self.theirInterpreter.synthetizer_paused = True
             self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently muted.")
