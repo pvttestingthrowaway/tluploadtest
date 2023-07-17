@@ -40,11 +40,11 @@ class Interpreter(QObject):
         self.cloner = None
         runLocal = settings["voice_recognition_type"] == 0
         openAIAPIKey = keyring.get_password("polyecho", "openai_api_key")
-        deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key")
-        audoApiKey = keyring.get_password("polyecho", "audo_api_key")
+        deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key") if settings["deepl_enabled"] else ""
+        audoApiKey = keyring.get_password("polyecho", "audo_api_key") if settings["audo_enabled"] else ""
 
-        modelSizes = ["base", "small", "medium", "large-v2"]
-        modelSize = modelSizes[settings["model_size"]]
+
+        modelSize = helper.modelSizes[settings["model_size"]]
         if runLocal:
             print(f"Using {modelSize} for faster-whisper")
         xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")

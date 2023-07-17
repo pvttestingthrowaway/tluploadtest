@@ -12,13 +12,11 @@ import openai
 from faster_whisper.transcribe import TranscriptionInfo
 
 class Recognizer:
-
     def __init__(self, runLocal, modelSize=None, apiKey=None):
         self.runLocal = runLocal
         self.model = None
         if self.runLocal:
             if platform.system() == "Linux" or platform.system() == "Windows":
-                #TODO: Shove the download in some kind of subclass of DownloadDialog so that it runs when a model size is picked instead.
                 self.model = faster_whisper.WhisperModel(modelSize, device="auto", compute_type="float16")
             else:
                 self.model = faster_whisper.WhisperModel(modelSize, device="auto")

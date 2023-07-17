@@ -309,17 +309,7 @@ class MainWindow(QtWidgets.QDialog):
 
         messageBox = QMessageBox()
         messageBox.setWindowTitle(helper.translate_ui_text("Starting..."))
-        runLocal = settings["voice_recognition_type"] == 0
-        if runLocal and "downloaded_models" not in settings:
-            settings["downloaded_models"] = []
-            helper.dump_settings()
-
-        if runLocal and settings["model_size"] not in settings["downloaded_models"]:
-            settings["downloaded_models"].append(settings["model_size"])
-            helper.dump_settings()
-            messageBox.setText(helper.translate_ui_text("Setting up interpreters. Downloading a whisper model, so this may take a long time..."))
-        else:
-            messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
+        messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
         messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
         signalEmitter = SignalEmitter()
         signalEmitter.signal.connect(lambda: messageBox.done(0))
@@ -587,7 +577,8 @@ def main():
         "your_ai_voice",
         "placeholder_ai_voice",
         "my_loudness_threshold",
-        "my_pause_time"
+        "my_pause_time",
+        "deepl_enabled"
     ]
 
     missing_keys = set(expectedKeys) - set(settings.keys())

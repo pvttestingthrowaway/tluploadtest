@@ -1,5 +1,6 @@
 import copy
 import os
+import shutil
 import sys
 import threading
 from typing import Optional
@@ -222,24 +223,6 @@ class ConfigDialog(LocalizedDialog):
 
         currentRow += 1
 
-        self.deepl_api_key = LabeledInput(
-            "DeepL API Key (Optional)",
-            configKey="deepl_api_key",
-            protected=True,
-            info="Optional, providers better translation.\nIf a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
-        )
-        self.layout.addWidget(self.deepl_api_key, currentRow, 0)
-
-        self.audo_api_key = LabeledInput(
-            "Audo API Key (Optional)",
-            configKey="audo_api_key",
-            protected=True,
-            info="Optional. Enhances the audio when imitating the other user's voice, resulting in a higher quality copy."
-        )
-        self.layout.addWidget(self.audo_api_key, currentRow, 2)
-
-        currentRow += 1
-
         self.elevenlabs_api_key = LabeledInput(
             "ElevenLabs API Key",
             configKey="elevenlabs_api_key",
@@ -269,6 +252,44 @@ class ConfigDialog(LocalizedDialog):
 
         currentRow += 1
 
+        self.deepl_api_key = LabeledInput(
+            "DeepL API Key",
+            configKey="deepl_api_key",
+            protected=True
+        )
+        self.layout.addWidget(self.deepl_api_key, currentRow, 2)
+
+        self.deepl_toggle = ToggleButton(
+            "DeepL Translation",
+            ["Enabled", "Disabled"],
+            [lambda: self.deepl_toggle_visibility(True), lambda: self.deepl_toggle_visibility(False)],
+            info="Optional, providers better translation.\nIf a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead.",
+            configKey="deepl_enabled"
+        )
+        self.layout.addWidget(self.deepl_toggle, currentRow, 0)
+        self.deepl_api_key.setVisible(self.deepl_toggle.get_value() == 0)
+
+        currentRow += 1
+
+        self.audo_api_key = LabeledInput(
+            "Audo API Key",
+            configKey="audo_api_key",
+            protected=True
+        )
+        self.layout.addWidget(self.audo_api_key, currentRow, 2)
+
+        self.audo_toggle = ToggleButton(
+            "Audo.ai enhancement",
+            ["Enabled", "Disabled"],
+            [lambda: self.audo_toggle_visibility(True), lambda: self.audo_toggle_visibility(False)],
+            info="Optional. Enhances the audio when imitating the other user's voice, resulting in a higher quality copy.",
+            configKey="audo_enabled"
+        )
+        self.layout.addWidget(self.audo_toggle, currentRow, 0)
+        self.audo_api_key.setVisible(self.audo_toggle.get_value() == 0)
+
+        currentRow += 1
+
         self.transcript_save_location = LabeledInput(
             "Transcript save location",
             configKey="transcript_save_location",
@@ -278,16 +299,16 @@ class ConfigDialog(LocalizedDialog):
         self.layout.addWidget(self.transcript_save_location, currentRow, 2)
 
 
-        self.transcription_storage_toggle = ToggleButton(
+        self.transcript_toggle = ToggleButton(
             "Transcription storage",
-            ["Enable", "Disable"],
-            [self.transcript_enable, self.transcript_disable],
+            ["Enabled", "Disabled"],
+            [lambda: self.transcript_toggle_visibility(True), lambda: self.transcript_toggle_visibility(False)],
             info="If enabled, PolyEcho will save a .srt transcript of all audio (both the recognized and translated text) to the specified directory.",
             configKey="transcription_storage"
         )
-        self.layout.addWidget(self.transcription_storage_toggle, currentRow, 0)
+        self.layout.addWidget(self.transcript_toggle, currentRow, 0)
 
-        self.transcript_save_location.setVisible(self.transcription_storage_toggle.get_value() == 0)
+        self.transcript_save_location.setVisible(self.transcript_toggle.get_value() == 0)
 
 
 
@@ -394,7 +415,8 @@ class ConfigDialog(LocalizedDialog):
 
         # Now get the sizeHint of the settings_widget and compare it with the screen size
         recommended_size = self.settings_widget.sizeHint()
-        screen_size = screen.size()
+        screen_size = screen.availableGeometry()
+        screen_size = QtCore.QSize(int(screen_size.width()*8/10), int(screen_size.height()*8/10))
 
         # Calculate the size to set (accounting for the scroll bars)
         size_to_set = QtCore.QSize(
@@ -431,7 +453,6 @@ class ConfigDialog(LocalizedDialog):
             tlCachingThread.start()
 
         recognitionModeChanged = settings["voice_recognition_type"] != self.voice_recognition_type.get_value()
-
         newSettings = copy.deepcopy(settings)
         for widget in self.iterate_widgets(self.layout):
             if hasattr(widget, 'configKey'):
@@ -460,20 +481,34 @@ class ConfigDialog(LocalizedDialog):
                             except openai.error.AuthenticationError:
                                 errorMessage += "\nOpenAI API error. API Key may be incorrect."
 
-                if configKey == "deepl_api_key" and value != "":
+                if configKey == "model_size" and self.voice_recognition_type.get_value() == 0:
+                    modelSize = helper.modelSizes[value]
+                    modelDir = os.path.join(helper.cacheDir, "faster-whisper", "models--guillaumekln--faster-whisper-" + modelSize)
+                    modelFound = False
+
+                    if os.path.exists(modelDir):
+                        modelFound = helper.find_model_bin(modelDir)
+                        if not modelFound:
+                            #The folder exists, but we were unable to find the model. Must've been incomplete. Redo.
+                            shutil.rmtree(modelDir)
+
+                    if not modelFound:
+                        ModelDownloadDialog("Downloading model...", modelSize).exec()
+
+                if configKey == "deepl_api_key" and self.deepl_toggle.get_value() == 0:
                     if keyring.get_password("polyecho","deepl_api_key") != value:
                         deeplTranslator = helper.get_deepl_translator(value, exitOnFail=False)
                         if deeplTranslator is None:
                             errorMessage += "\nDeepL API error. API Key may be incorrect."
 
-                if configKey == "audo_api_key" and value != "":
+                if configKey == "audo_api_key" and self.audo_toggle.get_value() == 0:
                     if keyring.get_password("polyecho", "audo_api_key") != value:
                         audoClient = helper.get_audo_client(value, exitOnFail=False)
                         if audoClient is None:
                             errorMessage += "\nAudo API error. API Key may be incorrect."
 
                 if configKey == "transcript_save_location":
-                    if self.transcription_storage_toggle.get_value() == 0:
+                    if self.transcript_toggle.get_value() == 0:
                         if value is None or not os.path.isdir(value):
                             errorMessage += "\nSpecified transcript save location is not a valid directory."
 
@@ -522,13 +557,17 @@ class ConfigDialog(LocalizedDialog):
 
     def cancel_clicked(self):
         self.close()
-    def transcript_enable(self):
-        print("Transcription storage enabled.")
-        self.transcript_save_location.setVisible(True)
+    def transcript_toggle_visibility(self, visible):
+        print(f"Transcription storage visibility set to {visible}.")
+        self.transcript_save_location.setVisible(visible)
 
-    def transcript_disable(self):
-        print("Transcription storage disabled.")
-        self.transcript_save_location.setVisible(False)
+    def audo_toggle_visibility(self, visible):
+        print(f"Audo visibility set to {visible}.")
+        self.audo_api_key.setVisible(visible)
+
+    def deepl_toggle_visibility(self, visible):
+        print(f"DeepL visibility set to {visible}.")
+        self.deepl_api_key.setVisible(visible)
 
     def on_local(self):
         self.localWhisperWidgets.setVisible(True)

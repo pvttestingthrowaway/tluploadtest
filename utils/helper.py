@@ -19,20 +19,26 @@ from PyQt6 import QtWidgets
 from audoai.noise_removal import NoiseRemovalClient
 from elevenlabslib import ElevenLabsUser
 
-#The following is a pre-baked list of translated languages.
-resourcesDir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),"resources")
+
+rootDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+cacheDir = os.path.join(rootDir, "cache")
+resourcesDir = os.path.join(rootDir,"resources")
 langNamesPath = os.path.join(resourcesDir, "langnames.json")
 styleSheetPath = os.path.join(resourcesDir, "stylesheet.qss")
 tlCachePath =  os.path.join(resourcesDir, "tlcache.json")
+
+modelSizes = ["base", "small", "medium", "large-v2"]
 
 translator = googletrans.Translator()
 with open(langNamesPath, "r", encoding="utf8") as fp:
     languages_translated = json.load(fp)
 
+
+
 default_settings = {
     "voice_recognition_type": 0,
     "model_size": 2,
-    "transcription_storage": 1,
+    "transcription_storage": 0,
     "ui_language": "System Language - syslang",
     "their_loudness_threshold": "250",
     "their_pause_time": "0.5"
@@ -453,11 +459,11 @@ def get_xi_user(apiKey, exitOnFail=True) -> Optional[elevenlabslib.ElevenLabsUse
 def get_deepl_translator(apiKey, exitOnFail=True) -> Optional[deepl.Translator]:
     errorMessage = ""
     for i in range(maxAPIRetries):
-        deeplTranslator = deepl.Translator(apiKey).set_app_info("polyecho", "1.0.0")
         try:
+            deeplTranslator = deepl.Translator(apiKey).set_app_info("polyecho", "1.0.0")
             deeplTranslator.get_usage()
             return deeplTranslator
-        except deepl.DeepLException:
+        except (deepl.DeepLException, ValueError):
             errorMessage = "\nDeepL API error. API Key may be incorrect."
 
     # We exhausted the tries without successfully getting the user.
@@ -482,6 +488,19 @@ def get_audo_client(apiKey, exitOnFail=True) -> Optional[NoiseRemovalClient]:
         show_msgbox_and_exit(errorMessage)
     return None
 
+
+def find_model_bin(root_dir):
+    for item in os.listdir(root_dir):
+        item_path = os.path.join(root_dir, item)
+        if os.path.isdir(item_path):
+            if "model.bin" in os.listdir(item_path):
+                return True  # "model.bin" found, return True
+            else:
+                # Recursively search in the sub-directory
+                if find_model_bin(
+                        item_path):  # If "model.bin" found in a sub-directory, return True
+                    return True
+    return False  # "model.bin" not found in any directories, return False
 
 def show_msgbox_and_exit(text, url=None, urlBtnText=None, exitCode=1):
     msgBox = QtWidgets.QMessageBox()

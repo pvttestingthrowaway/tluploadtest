@@ -1,9 +1,12 @@
+import io
 import os
+import re
 import sys
 import threading
 import time
 from typing import Optional
 
+import faster_whisper
 import keyring
 import requests
 from PyQt6 import QtWidgets, QtCore, QtGui
@@ -109,7 +112,7 @@ class LabeledInput(QtWidgets.QWidget):
         protected: Saves the config data to the system keyring instead of the 'settings' dict.
     fixedComboSize and localizeComboBox can be ignored.
     """
-    def __init__(self, label, configKey, data=None, info=None, infoIsDir=False, protected=False, fixedComboBoxSize=30, localizeComboBox=False):
+    def __init__(self, label, configKey, data=None, info=None, infoIsDir=False, protected=False, fixedComboBoxSize=30, localizeComboBox=False, fixedLineEditSize=None):
         super().__init__()
         self.configKey = configKey
         self.layout = QtWidgets.QVBoxLayout(self)
@@ -145,6 +148,11 @@ class LabeledInput(QtWidgets.QWidget):
             self.line_edit.setText(data)
             if protected:
                 self.line_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.PasswordEchoOnEdit)
+            if fixedLineEditSize is not None:
+                fm = QtGui.QFontMetrics(self.line_edit.font())
+                # Compute the width of 'n' (fixedLineEditSize) 'X' characters (or any other character you want)
+                width = fm.horizontalAdvance('X' * fixedComboBoxSize)
+                self.line_edit.setMinimumWidth(width)
 
             self.input_layout.addWidget(self.line_edit)
 
@@ -547,9 +555,10 @@ def format_eta(seconds) -> str:
 class DownloadThread(QtCore.QThread):
     setProgressBarTotalSignal = QtCore.pyqtSignal(int)
     updateProgressSignal = QtCore.pyqtSignal(int)
-    labelTextSignal = QtCore.pyqtSignal(int)
+    etaSignal = QtCore.pyqtSignal(int)
     doneSignal = QtCore.pyqtSignal()
 
+class FileDownloadThread(DownloadThread):
     def __init__(self, url, location):
         super().__init__()
         self.url = url
@@ -593,7 +602,7 @@ class DownloadThread(QtCore.QThread):
                         if download_speed != 0:  # Avoid division by zero
                             eta = int(remaining_data / download_speed)
                             print(f"ETA: {eta} seconds")
-                            self.labelTextSignal.emit(eta)
+                            self.etaSignal.emit(eta)
                         self.updateProgressSignal.emit(int((total_data_received / total_size_in_bytes) * 100))
                         # Reset tracking variables for the next X seconds
                         last_emit_time = current_time  # Update last_emit_time
@@ -610,19 +619,64 @@ class DownloadThread(QtCore.QThread):
 
         self.doneSignal.emit()
 
-
-class DownloadDialog(QtWidgets.QDialog):
-    def __init__(self, baseLabelText, url, location):
+class SignalOutputStream(io.StringIO):
+    def __init__(self, progressSignal:QtCore.pyqtSignal, etaSignal:QtCore.pyqtSignal):
         super().__init__()
+        self.progressSignal = progressSignal
+        self.etaSignal = etaSignal
+    def write(self, s):
+        super().write(s)  # Optionally, write the output to a buffer
+        # Do something with the output. For example, extract the progress and update your UI
+        if "downloading" in s.lower() and "model.bin" in s.lower():
+            print(s)
+            try:
+                # Extract completion percentage
+                completion_match = re.search(r"(\d+)%", s)
+                completion = int(completion_match.group(1)) if completion_match else None
+
+                # Extract ETA
+                eta_match = re.search(r"<(\d+:\d+:\d+|\d+:\d+)", s)
+                if eta_match:
+                    eta = eta_match.group(1)
+                    eta = sum(int(val) * (60 ** i) for i, val in enumerate(eta.split(":")[::-1]))
+                else:
+                    eta = None
+
+
+                #Esoteric math oneliner for literally no reason
+                print(f"Completion: {completion}%, ETA:{eta}s")
+                if completion is not None:
+                    self.progressSignal.emit(completion)
+                if eta is not None:
+                    self.etaSignal.emit(eta)
+            except Exception as e:
+                print(f"Caught {e}")
+                print("")
+
+class ModelDownloadThread(DownloadThread):
+    setProgressBarTotalSignal = QtCore.pyqtSignal(int)
+    updateProgressSignal = QtCore.pyqtSignal(int)
+    etaSignal = QtCore.pyqtSignal(int)
+    doneSignal = QtCore.pyqtSignal()
+    def __init__(self, modelSize):
+        super().__init__()
+        self.modelSize = modelSize
+        self.cacheDir = os.path.join(helper.cacheDir, "faster-whisper")
+        self.signalStream = SignalOutputStream(self.updateProgressSignal, self.etaSignal)
+    def run(self):
+        self.setProgressBarTotalSignal.emit(100)
+        oldStdErr = sys.stderr
+        sys.stderr = self.signalStream
+        faster_whisper.download_model(self.modelSize, cache_dir=self.cacheDir)
+        sys.stderr = oldStdErr
+        self.doneSignal.emit()
+
+class ProgressDialog(QtWidgets.QDialog):
+    def __init__(self, baseLabelText, downloadThread:DownloadThread):
+        super().__init__()
+
         self.setWindowTitle(helper.translate_ui_text('Download'))
         self.previous_percent_completed = -1
-
-        self.download_thread = DownloadThread(url, location)
-
-        self.download_thread.setProgressBarTotalSignal.connect(self.set_progress_bar)
-        self.download_thread.doneSignal.connect(lambda: self.done(0))
-        self.download_thread.labelTextSignal.connect(self.set_eta)
-        self.download_thread.updateProgressSignal.connect(self.update_progress_bar)
 
         self.layout = QtWidgets.QVBoxLayout()
         self.baseLabelText = helper.translate_ui_text(baseLabelText)
@@ -633,10 +687,17 @@ class DownloadDialog(QtWidgets.QDialog):
         self.layout.addWidget(self.progress)
         self.setLayout(self.layout)
 
+        self.download_thread = downloadThread
+
+        self.download_thread.setProgressBarTotalSignal.connect(self.set_progress_bar_total)
+        self.download_thread.doneSignal.connect(lambda: self.done(0))
+        self.download_thread.etaSignal.connect(self.set_eta)
+        self.download_thread.updateProgressSignal.connect(self.update_progress_bar)
+
     def set_eta(self, ETASeconds):
         self.label.setText(f"{self.baseLabelText} ({format_eta(ETASeconds)})")
 
-    def set_progress_bar(self, amount):
+    def set_progress_bar_total(self, amount):
         if amount == -1:
             self.progress.setRange(0, 0)
         else:
@@ -665,3 +726,11 @@ class DownloadDialog(QtWidgets.QDialog):
             sys.exit(0)
         else:
             event.ignore()
+
+class ModelDownloadDialog(ProgressDialog):
+    def __init__(self, baseLabelText, modelSize):
+        super().__init__(baseLabelText, ModelDownloadThread(modelSize))
+
+class DownloadDialog(ProgressDialog):
+    def __init__(self, baseLabelText, url, location):
+        super().__init__(baseLabelText, FileDownloadThread(url, location))

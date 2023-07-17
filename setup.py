@@ -12,8 +12,8 @@ from utils.customWidgets import *
 
 #Helper functions for ffmpeg download/extract
 def download_ffmpeg():
-    downloadDir = os.path.join(os.getcwd(), "ffmpeg-dl")
-    extractDir = os.path.join(os.getcwd(), 'ffmpeg-bin')
+    downloadDir = os.path.join(helper.cacheDir, "ffmpeg-dl")
+    extractDir = os.path.join(helper.rootDir, 'ffmpeg-bin')
     currentOS = platform.system()
     os.makedirs(downloadDir, exist_ok=True)
 
@@ -73,7 +73,7 @@ def main():
             exit()
 
         # Ensure the dir exists
-        os.makedirs(os.path.join(os.getcwd(), "ffmpeg-bin"), exist_ok=True)
+        os.makedirs(os.path.join(helper.rootDir, "ffmpeg-bin"), exist_ok=True)
 
         if not os.path.exists(f"ffmpeg-bin/ffmpeg{'.exe' if currentOS == 'Windows' else ''}"):
             # It's not downloaded either. Download it.
@@ -82,7 +82,7 @@ def main():
                 raise Exception("Download failed! Please try again.")
 
         # At this point the binary files for ffmpeg are in ffmpeg-bin in the current directory.
-        os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(), "ffmpeg-bin")
+        os.environ["PATH"] += os.pathsep + os.path.join(helper.rootDir, "ffmpeg-bin")
 
     # ffmpeg is installed and in path.
     # Add CUDNN and cublas too.
