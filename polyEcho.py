@@ -134,7 +134,7 @@ class MainWindow(QtWidgets.QDialog):
 
         # First row
         self.your_output_lang = LabeledInput(
-            "Your output language",
+            "Your target language",
             configKey = "your_output_language",
             data=helper.get_supported_languages_localized(self.user, settings["ui_language"]),
             fixedComboBoxSize=None,
@@ -143,7 +143,7 @@ class MainWindow(QtWidgets.QDialog):
         inactive_layout.addWidget(self.your_output_lang, 0, 0)
 
         self.their_output_lang = LabeledInput(
-            "Their output language",
+            "Their target language",
             configKey="their_output_language",
             data = helper.get_supported_languages_localized(self.user, settings["ui_language"]),
             fixedComboBoxSize=None,
@@ -164,7 +164,7 @@ class MainWindow(QtWidgets.QDialog):
         self.voicePicker = LabeledInput(
             "Select an existing voice",
             data=helper.get_list_of_voices(self.user),
-            info="The placeholder voice will not be used, and a new clone will not be created.",
+            info="The placeholder voice will not be used, and their voice will not be copied.",
             configKey="voice_picker"
         )
 
@@ -174,10 +174,11 @@ class MainWindow(QtWidgets.QDialog):
         if self.user is not None and self.user.get_voice_clone_available():
             # Second row
             self.voiceType = ToggleButton(
-                "Output Voice",
-                ["Create new", "Re-use"],
+                "Their AI Voice",
+                ["Copy theirs", "Re-use existing"],
                 [self.on_new, self.on_reuse],
-                configKey="voice_type"
+                configKey="voice_type",
+                info="Select whether you would like to copy the voice of the user you're speaking to.<br>If you choose \"Copy Theirs\", the selected placeholder voice will be used while the cloning process is running.<br>If you choose \"Re-use existing\", the selected voice will be used instead."
             )
             inactive_layout.addWidget(self.voiceType, 1, 1)
         else:
@@ -565,6 +566,7 @@ class MainWindow(QtWidgets.QDialog):
 
 def main():
     tracemalloc.start()
+
     app = QApplication([])
     app.setWindowIcon(QIcon(os.path.join(helper.resourcesDir,'icon.ico')))
 

@@ -3,6 +3,7 @@ import json
 import os
 import platform
 import re
+import webbrowser
 from typing import Union, Optional
 
 import deepl
@@ -10,6 +11,7 @@ import elevenlabslib
 import googletrans
 import httpcore
 import psutil
+import pynvml
 import sounddevice
 import unicodedata
 import websocket
@@ -44,7 +46,7 @@ colors_dict = {
     "text_color":"#FFFFFF",
     "toggle_color":"#4a708b",
     "green":"#3a7a3a",
-    "yellow":"#7a7a3a",
+    "yellow":"#faf20c",
     "red":"#7a3a3a"
 }
 
@@ -480,20 +482,34 @@ def get_audo_client(apiKey, exitOnFail=True) -> Optional[NoiseRemovalClient]:
         show_msgbox_and_exit(errorMessage)
     return None
 
-def show_msgbox_and_exit(text, exitCode=1):
+
+def show_msgbox_and_exit(text, url=None, urlBtnText=None, exitCode=1):
     msgBox = QtWidgets.QMessageBox()
+    msgBox.setIcon(QtWidgets.QMessageBox.Icon.Critical)
     msgBox.setText(translate_ui_text(text))
-    msgBox.exec()
+    if url is not None:
+        open_site_button = msgBox.addButton(translate_ui_text(urlBtnText), QtWidgets.QMessageBox.ButtonRole.ActionRole)
+    msgBox.addButton(QtWidgets.QMessageBox.StandardButton.Close)
+
+    retval = msgBox.exec()
+
+    if url is not None and msgBox.clickedButton() == open_site_button:
+        webbrowser.open_new_tab(url)
+
     exit(exitCode)
 
 def print_usage_info(codeID):
     print("===================RESOURCE USAGE STATS===================")
     print(codeID)
-    from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
-    nvmlInit()
-    h = nvmlDeviceGetHandleByIndex(0)
-    info = nvmlDeviceGetMemoryInfo(h)
-    print(f"VRAM usage: {round(info.used / pow(10, 9), 2)}GB")
+    try:
+        from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
+        nvmlInit()
+        h = nvmlDeviceGetHandleByIndex(0)
+        info = nvmlDeviceGetMemoryInfo(h)
+        print(f"VRAM usage: {round(info.used / pow(10, 9), 2)}GB")
+    except pynvml.NVMLError:
+        pass    #No NVIDIA GPU probably.
+
     process = psutil.Process(os.getpid())
     print(f"RAM usage: {round(process.memory_info().rss / pow(10, 9), 2)}GB")
     print("")

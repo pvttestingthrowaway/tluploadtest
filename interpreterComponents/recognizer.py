@@ -15,7 +15,7 @@ class Recognizer:
 
     def __init__(self, runLocal, modelSize=None, apiKey=None):
         self.runLocal = runLocal
-
+        self.model = None
         if self.runLocal:
             if platform.system() == "Linux" or platform.system() == "Windows":
                 #TODO: Shove the download in some kind of subclass of DownloadDialog so that it runs when a model size is picked instead.
@@ -46,11 +46,12 @@ class Recognizer:
                 print(self.interruptEvent.is_set())
                 if self.interruptEvent.is_set():
                     print("Recognizer exiting...")
-                    del self.model  #This is just to ensure the allocated resources are free'd up correctly.
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    gc.collect()
+                    if self.model is not None:
+                        del self.model  #This is just to ensure the allocated resources are free'd up correctly.
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        gc.collect()
                     return
 
             print("Running recognition...")

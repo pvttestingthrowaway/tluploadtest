@@ -1,4 +1,5 @@
 import datetime
+import platform
 import queue
 import threading
 
@@ -17,11 +18,11 @@ class SetupDialog(LocalizedDialog):
         self.gridLayout.addWidget(self.promptLabel, 0, 0, 1, 3)
         self.saveExit = False
 
-        saveButton = QtWidgets.QPushButton(helper.translate_ui_text("Save"))
-        saveButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
-        saveButton.setMinimumSize(30, 25)  # adjust the size as per your need
-        saveButton.clicked.connect(self.save_clicked)
-        self.gridLayout.addWidget(saveButton, 99, 2)    #Just so we're sure it's at the bottom.
+        self.nextButton = QtWidgets.QPushButton(helper.translate_ui_text("Next"))
+        self.nextButton.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.nextButton.setMinimumSize(30, 25)  # adjust the size as per your need
+        self.nextButton.clicked.connect(self.save_clicked)
+        self.gridLayout.addWidget(self.nextButton, 99, 2)    #Just so we're sure it's at the bottom.
 
     #This is just an edited version of configWindow's save_clicked method.
     def iterate_widgets(self, layout):
@@ -180,30 +181,48 @@ class AudioDeviceInput(SetupDialog):
 
 class VirtualInputOutput(SetupDialog):
     def __init__(self):
-        super().__init__("Please set the following devices as your chat program's microphone and speakers.")
+        super().__init__("Please set the following devices as microphone and speakers\nin the chat program you'd like to use (eg. Zoom, Discord).")
 
-        warning = LocalizedCenteredLabel("WARNING: If you would like to use your chat program WITHOUT running PolyEcho, you will need to change them.")
+        warning = LocalizedCenteredLabel("WARNING: In order to use your chosen program\nwithout PolyEcho, you will need to change them.")
         self.gridLayout.addWidget(warning, 1, 1)
 
-        virtualDevices = helper.get_virtual_devices()
         input_label = LocalizedCenteredLabel("Input device")
-        self.virtual_input = CenteredLabel(virtualDevices["you"]["input"])
         output_label = LocalizedCenteredLabel("Output device")
-        self.virtual_output = CenteredLabel(virtualDevices["them"]["output"])
-
         self.gridLayout.addWidget(input_label, 2, 0)
-        self.gridLayout.addWidget(self.virtual_input, 3, 0)
         self.gridLayout.addWidget(output_label, 2, 2)
-        self.gridLayout.addWidget(self.virtual_output, 3, 2)
+
+        virtualDevices = helper.get_virtual_devices()
+        try:
+            self.virtual_input = CenteredLabel(virtualDevices["you"]["input"][:virtualDevices["you"]["input"].index(" - ")])
+            self.virtual_output = CenteredLabel(virtualDevices["them"]["output"][:virtualDevices["them"]["output"].index(" - ")])
+            self.gridLayout.addWidget(self.virtual_input, 3, 0)
+            self.gridLayout.addWidget(self.virtual_output, 3, 2)
+        except KeyError:
+            currentOS = platform.system()
+            if currentOS == 'Windows':
+                errorText = "Could not detect VB-Cable devices. Please make sure VB-Cable A+B is installed."
+                url = "https://shop.vb-audio.com/en/win-apps/12-vb-cable-ab.html?SubmitCurrency=1&id_currency=1"
+                urlBtnText = "Buy VB-Cable A+B"
+            elif currentOS == 'Darwin':
+                errorText = "Could not detect VB-Cable devices. Please make sure VB-Cable A+B is installed."
+                url = "https://shop.vb-audio.com/en/mac-apps/30-vb-cable-ab-mac.html?SubmitCurrency=1&id_currency=1"
+                urlBtnText = "Buy VB-Cable A+B"
+            else:
+                errorText = "Could not detect virtual audio devices. Please make sure you have followed the setup guide."
+                #TODO: Fill this in.
+                url = ""
+                urlBtnText = "Open setup guide"
+            helper.show_msgbox_and_exit(errorText, url=url, urlBtnText=urlBtnText)
+
+
 
 class ElevenLabsInput(SetupDialog):
     def __init__(self):
-        super().__init__("Please input your ElevenLabs API Key.")
+        super().__init__("Please input your ElevenLabs API Key.\nIt can be found under Profile, on elevenlabs.io")
 
         self.elevenlabs_api_key = LabeledInput(
             "ElevenLabs API Key",
             configKey="elevenlabs_api_key",
-            info="You can find your API Key under your Profile, on the website.",
             protected=True
         )
 
@@ -228,7 +247,7 @@ class VoiceInput(SetupDialog):
             "Placeholder AI Voice",
             configKey="placeholder_ai_voice",
             data=helper.get_list_of_voices(user),
-            info="This is the voice that will be used as a placeholder while cloning the user's actual voice."
+            info="This is the voice that will be used as a placeholder while copying the other user's actual voice."
         )
         self.gridLayout.addWidget(self.placeholder_ai_voice, 1, 2)
 
@@ -240,7 +259,7 @@ class OptionalAPIInput(SetupDialog):
             "DeepL API Key (Optional)",
             configKey="deepl_api_key",
             protected=True,
-            info="Optional. If a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
+            info="Optional, providers better translation.\nIf a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
         )
         self.gridLayout.addWidget(self.deepl_api_key, 1, 0)
 
@@ -248,7 +267,7 @@ class OptionalAPIInput(SetupDialog):
             "Audo API Key (Optional)",
             configKey="audo_api_key",
             protected=True,
-            info="Optional. Enhances the audio for clone creation, resulting in a higher quality clone."
+            info="Optional. Enhances the audio when imitating the other user's voice, resulting in a higher quality copy."
         )
         self.gridLayout.addWidget(self.audo_api_key, 1, 2)
 
@@ -258,7 +277,8 @@ class SpeechDetectInput(SetupDialog):
         self.myEnergyThreshold = LabeledInput(
             "My loudness threshold",
             configKey="my_loudness_threshold",
-            data="250"
+            data="250",
+            info="This indicates how loud you have to be for your voice to be detected.\nShould be kept in the 200-300 range."
         )
         self.gridLayout.addWidget(self.myEnergyThreshold, 1, 0)
 
@@ -268,7 +288,8 @@ class SpeechDetectInput(SetupDialog):
         self.myPauseTime = LabeledInput(
             "My pause time (in seconds)",
             data="0.5",
-            configKey="my_pause_time"
+            configKey="my_pause_time",
+            info="This indicates how long you have to pause before a sentence is considered over."
         )
         self.gridLayout.addWidget(self.myPauseTime, 1, 2)
 
@@ -304,6 +325,8 @@ class SpeechDetectInput(SetupDialog):
         detectorThread.start()
 
         msgBox = QtWidgets.QMessageBox(self)
+        msgBox.setWindowTitle(helper.translate_ui_text("Speech recognition testing"))
+        customOkButton = msgBox.addButton(helper.translate_ui_text("Return"), QtWidgets.QMessageBox.ButtonRole.AcceptRole)
         msgBox.setText(helper.translate_ui_text("Waiting for detection..."))
 
         def update_message_box(text):
@@ -354,9 +377,9 @@ class SpeechRecInput(SetupDialog):
 
         prompt = "Please choose which speech recognition mode you'd like to use."
         if localRecommended:
-            prompt += "\nSince you have an NVIDIA GPU with sufficient VRAM, local mode is recommended."
+            prompt += "\nYou have an NVIDIA GPU with sufficient VRAM.\nLocal mode is recommended."
         else:
-            prompt += "\nYou do not meet the recommended requirements for local mode. Online mode is recommended."
+            prompt += "\nYou do not meet the recommended requirements for local mode.\nOnline mode is recommended."
         super().__init__(prompt)
 
         self.localWhisperWidgets = LocalWidgets()
@@ -369,7 +392,7 @@ class SpeechRecInput(SetupDialog):
             "Voice recognition type",
             ["Local", "Online"],
             [self.on_local, self.on_online],
-            info="This is the type of voice recognition.",
+            info="This is the type of voice recognition.<br>Local runs on your machine, is free, and is the fastest in terms of latency, but the speed depends on your GPU.<br>Online utilizes OpenAI's Whisper API. It has higher latency, but will run on any computer.",
             configKey="voice_recognition_type"
         )
         self.gridLayout.addWidget(self.voice_recognition_type, 1, 1)
@@ -382,6 +405,9 @@ class SpeechRecInput(SetupDialog):
         else:
             self.voice_recognition_type.button_clicked(1, self.on_online)
 
+        self.adjustSize()
+        if not localRecommended:
+            self.resize(QtCore.QSize(int(self.width()*1.5), self.height()))
 
     def on_local(self):
         self.whisperAPIWidgets.setVisible(False)
@@ -400,4 +426,6 @@ def run_first_time_setup():
     VoiceInput().exec()
     OptionalAPIInput().exec()
     SpeechDetectInput().exec()
-    SpeechRecInput().exec()
+    temp = SpeechRecInput()
+    temp.nextButton.setText(helper.translate_ui_text("Finish"))
+    temp.exec()

@@ -27,7 +27,7 @@ class SpeechRecWidget(QtWidgets.QWidget):
             "My loudness threshold",
             configKey="my_loudness_threshold",
             data="250",
-            info="This indicates how loud you have to be for your voice to be detected."
+            info="This indicates how loud you have to be for your voice to be detected.\nShould be kept in the 200-300 range."
         )
         self.layout.addWidget(self.myEnergyThreshold, 0, 0)
 
@@ -179,8 +179,12 @@ class ConfigDialog(LocalizedDialog):
             helper.show_msgbox_and_exit(errorMessage)
 
         currentRow = 0
-        self.layout = QtWidgets.QGridLayout(self)
 
+
+        self.root_layout = QtWidgets.QGridLayout(self)
+
+
+        self.layout = QtWidgets.QGridLayout()
         self.input_device = LabeledInput(
             "Audio input device",
             configKey = "audio_input_device",
@@ -199,14 +203,22 @@ class ConfigDialog(LocalizedDialog):
             "Audio output device",
             configKey="audio_output_device",
             data = helper.get_list_of_portaudio_devices("output"),
-            info=f"dummy"
+            info="This is the device you will hear audio from."
         )
-        outputInfo = helper.translate_ui_text("This is the device you will hear audio from.<br>")
-        virtualOutput = virtualDevices['them']['output']
-        virtualOutput = virtualOutput[:virtualOutput.index(" - ")]
-        outputInfo += helper.translate_ui_text("Please set the output device in your chat app to") + f": {virtualOutput}"
-        self.output_device.info_button.info = outputInfo
         self.layout.addWidget(self.output_device, currentRow, 2)
+
+        currentRow += 1
+
+        input_label = LocalizedCenteredLabel("Virtual Input Device")
+        output_label = LocalizedCenteredLabel("Virtual Output Device")
+        self.layout.addWidget(input_label, currentRow, 0)
+        self.layout.addWidget(output_label, currentRow, 2)
+
+        currentRow += 1
+        self.virtual_input = CenteredLabel(f'{virtualDevices["you"]["input"][:virtualDevices["you"]["input"].index(" - ")]}\n')
+        self.virtual_output = CenteredLabel(f'{virtualDevices["them"]["output"][:virtualDevices["them"]["output"].index(" - ")]}\n')
+        self.layout.addWidget(self.virtual_input, currentRow, 0)
+        self.layout.addWidget(self.virtual_output, currentRow, 2)
 
         currentRow += 1
 
@@ -214,7 +226,7 @@ class ConfigDialog(LocalizedDialog):
             "DeepL API Key (Optional)",
             configKey="deepl_api_key",
             protected=True,
-            info="Optional. If a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
+            info="Optional, providers better translation.\nIf a language is not supported by DeepL (or an API key is not provided) Google Translate will be used instead."
         )
         self.layout.addWidget(self.deepl_api_key, currentRow, 0)
 
@@ -222,7 +234,7 @@ class ConfigDialog(LocalizedDialog):
             "Audo API Key (Optional)",
             configKey="audo_api_key",
             protected=True,
-            info="Optional. Enhances the audio for clone creation, resulting in a higher quality clone."
+            info="Optional. Enhances the audio when imitating the other user's voice, resulting in a higher quality copy."
         )
         self.layout.addWidget(self.audo_api_key, currentRow, 2)
 
@@ -251,7 +263,7 @@ class ConfigDialog(LocalizedDialog):
             "Placeholder TTS Voice",
             configKey="placeholder_ai_voice",
             data=helper.get_list_of_voices(user),
-            info="This is the TTS voice that will be used to speak the other user's translated messages while a clone is being generated."
+            info="This is the voice that will be used as a placeholder while copying the other user's actual voice."
         )
         self.layout.addWidget(self.placeholder_ai_voice, currentRow, 2)
 
@@ -266,16 +278,16 @@ class ConfigDialog(LocalizedDialog):
         self.layout.addWidget(self.transcript_save_location, currentRow, 2)
 
 
-        self.transcription_storage = ToggleButton(
+        self.transcription_storage_toggle = ToggleButton(
             "Transcription storage",
             ["Enable", "Disable"],
-            [self.on_enable, self.on_disable],
+            [self.transcript_enable, self.transcript_disable],
             info="If enabled, PolyEcho will save a .srt transcript of all audio (both the recognized and translated text) to the specified directory.",
             configKey="transcription_storage"
         )
-        self.layout.addWidget(self.transcription_storage, currentRow, 0)
+        self.layout.addWidget(self.transcription_storage_toggle, currentRow, 0)
 
-        self.transcript_save_location.setVisible(self.transcription_storage.get_value() == 0)
+        self.transcript_save_location.setVisible(self.transcription_storage_toggle.get_value() == 0)
 
 
 
@@ -319,6 +331,11 @@ class ConfigDialog(LocalizedDialog):
 
         currentRow += 4
 
+
+
+
+
+
         # Save and Cancel buttons
         buttonLayout = QtWidgets.QHBoxLayout()
 
@@ -337,24 +354,56 @@ class ConfigDialog(LocalizedDialog):
         wrapperLayout.addStretch()
         wrapperLayout.addLayout(buttonLayout)
         # add the button layout to the grid layout
-        self.layout.addLayout(wrapperLayout, currentRow, 2)
+
+        self.root_layout.addLayout(wrapperLayout, currentRow, 2)
 
         self.ui_language = LabeledInput(
-            "GUI Language",
+            "Program Language",
             configKey="ui_language",
             data=helper.get_googletrans_native_langnames(settings["ui_language"])
         )
 
-        self.layout.addWidget(self.ui_language, currentRow, 0, 1, 1)
+        self.root_layout.addWidget(self.ui_language, currentRow, 0, 1, 1)
+
+
 
         for i in range(3):
             self.layout.setColumnStretch(i, 1)
+            self.root_layout.setColumnStretch(i, 1)
 
         for i in range(currentRow+1):
             self.layout.setRowStretch(i, 1)
+            self.root_layout.setRowStretch(i, 1)
 
+        self.settings_widget = QtWidgets.QWidget()
+        self.settings_widget.setLayout(self.layout)
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setWidgetResizable(True)  # Make the scroll area resizable
+        self.scroll_area.setWidget(self.settings_widget)
+
+        #With scroll
+        self.root_layout.addWidget(self.scroll_area, 0, 0, currentRow, 3)
+        #Without scroll
+        #self.root_layout.addWidget(self.settings_widget, 0, 0, currentRow - 1, 3)
+
+        self.setLayout(self.root_layout)  # Set root_layout as the layout for the main window (ConfigDialog)
+
+        # Get screen size
+        screen = QtWidgets.QApplication.primaryScreen()
         self.adjustSize()
-        #recursive_set_start_value(self.layout, QtWidgets.QLabel, 'Default Text')
+
+        # Now get the sizeHint of the settings_widget and compare it with the screen size
+        recommended_size = self.settings_widget.sizeHint()
+        screen_size = screen.size()
+
+        # Calculate the size to set (accounting for the scroll bars)
+        size_to_set = QtCore.QSize(
+            min(recommended_size.width()+self.scroll_area.verticalScrollBar().width()*3, screen_size.width()),
+            min(recommended_size.height()+self.scroll_area.horizontalScrollBar().height(), screen_size.height())
+        )
+
+        # Set the size of the dialog
+        self.resize(size_to_set)
 
     def iterate_widgets(self,layout):
         for i in range(layout.count()):
@@ -424,7 +473,7 @@ class ConfigDialog(LocalizedDialog):
                             errorMessage += "\nAudo API error. API Key may be incorrect."
 
                 if configKey == "transcript_save_location":
-                    if self.transcription_storage.get_value() == 0:
+                    if self.transcription_storage_toggle.get_value() == 0:
                         if value is None or not os.path.isdir(value):
                             errorMessage += "\nSpecified transcript save location is not a valid directory."
 
@@ -473,11 +522,11 @@ class ConfigDialog(LocalizedDialog):
 
     def cancel_clicked(self):
         self.close()
-    def on_enable(self):
+    def transcript_enable(self):
         print("Transcription storage enabled.")
         self.transcript_save_location.setVisible(True)
 
-    def on_disable(self):
+    def transcript_disable(self):
         print("Transcription storage disabled.")
         self.transcript_save_location.setVisible(False)
 

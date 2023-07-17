@@ -76,7 +76,7 @@ class InfoButton(QtWidgets.QPushButton):
         self.info = helper.translate_ui_text(info)
         self.setAccessibleName(helper.translate_ui_text(f"Info for {parentLabel}"))
         self.setAccessibleDescription(helper.translate_ui_text("Opens a messagebox with information."))
-        self.setStyleSheet("background-color: transparent;")
+        #self.setStyleSheet("background-color: transparent;")
 
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         size_policy.setHorizontalStretch(0)
