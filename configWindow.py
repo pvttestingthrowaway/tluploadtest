@@ -406,22 +406,28 @@ class ConfigDialog(LocalizedDialog):
         self.root_layout.addWidget(self.scroll_area, 0, 0, currentRow, 3)
         #Without scroll
         #self.root_layout.addWidget(self.settings_widget, 0, 0, currentRow - 1, 3)
-
         self.setLayout(self.root_layout)  # Set root_layout as the layout for the main window (ConfigDialog)
+        self.fix_size()
 
+
+    def fix_size(self):
         # Get screen size
         screen = QtWidgets.QApplication.primaryScreen()
         self.adjustSize()
 
+        if not hasattr(self, "settings_widget"):
+            return  #Whoops, too early.
+
         # Now get the sizeHint of the settings_widget and compare it with the screen size
+
         recommended_size = self.settings_widget.sizeHint()
         screen_size = screen.availableGeometry()
-        screen_size = QtCore.QSize(int(screen_size.width()*8/10), int(screen_size.height()*8/10))
+        screen_size = QtCore.QSize(int(screen_size.width() * 8 / 10), int(screen_size.height() * 8 / 10))
 
         # Calculate the size to set (accounting for the scroll bars)
         size_to_set = QtCore.QSize(
-            min(recommended_size.width()+self.scroll_area.verticalScrollBar().width()*3, screen_size.width()),
-            min(recommended_size.height()+self.scroll_area.horizontalScrollBar().height(), screen_size.height())
+            min(recommended_size.width() + self.scroll_area.verticalScrollBar().width() * 3, screen_size.width()),
+            min(recommended_size.height() + self.scroll_area.horizontalScrollBar().height(), screen_size.height())
         )
 
         # Set the size of the dialog
@@ -576,7 +582,7 @@ class ConfigDialog(LocalizedDialog):
         #self.azureWidgets.setVisible(False)
         self.whisperAPIWidgets.setVisible(False)
         self.localWhisperWidgets.layout.addWidget(self.speechRecWidgets, 3, 0, 2, 3)
-        self.adjustSize()
+        self.fix_size()
 
     def on_online(self):
         #self.online_provider.setVisible(True)
@@ -587,7 +593,7 @@ class ConfigDialog(LocalizedDialog):
         self.on_whisper()
         #else:
         #    self.on_azure()
-
+        self.fix_size()
 
     def on_azure(self):
         self.whisperAPIWidgets.setVisible(False)
