@@ -77,6 +77,7 @@ class InfoButton(QtWidgets.QPushButton):
     def __init__(self, info, parentLabel, isDir=False):
         super().__init__()
         self.info = helper.translate_ui_text(info)
+        self.setText("")
         self.setAccessibleName(helper.translate_ui_text(f"Info for {parentLabel}"))
         self.setAccessibleDescription(helper.translate_ui_text("Opens a messagebox with information."))
         #self.setStyleSheet("background-color: transparent;")
@@ -86,7 +87,8 @@ class InfoButton(QtWidgets.QPushButton):
         size_policy.setVerticalStretch(0)
         size_policy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
         self.setSizePolicy(size_policy)
-        self.setMaximumWidth(30)  # adjust width as needed
+
+        self.setMaximumWidth(25)  # adjust width as needed
         if isDir:
             self.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DirHomeIcon))
         else:

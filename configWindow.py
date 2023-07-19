@@ -223,6 +223,13 @@ class ConfigDialog(LocalizedDialog):
 
         currentRow += 1
 
+        hline = QtWidgets.QFrame()
+        hline.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        hline.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        self.layout.addWidget(hline, currentRow, 0, 1, 3)
+
+        currentRow += 1
+
         self.elevenlabs_api_key = LabeledInput(
             "ElevenLabs API Key",
             configKey="elevenlabs_api_key",
@@ -249,6 +256,13 @@ class ConfigDialog(LocalizedDialog):
             info="This is the voice that will be used as a placeholder while copying the other user's actual voice."
         )
         self.layout.addWidget(self.placeholder_ai_voice, currentRow, 2)
+
+        currentRow += 1
+
+        hline = QtWidgets.QFrame()
+        hline.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        hline.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        self.layout.addWidget(hline, currentRow, 0, 1, 3)
 
         currentRow += 1
 

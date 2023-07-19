@@ -176,7 +176,7 @@ class SetupDialog(LocalizedDialog):
 
 class LanguageInput(SetupDialog):
     def __init__(self):
-        super().__init__("Please choose the language to use for the application.")
+        super().__init__("Please choose the language to use for the application.\n NOTE: Any language other than English will be translated via Google Translate.")
 
         self.ui_language = LabeledInput(
             "GUI Language",

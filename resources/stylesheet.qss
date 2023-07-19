@@ -68,3 +68,7 @@ QScrollBar::handle {
 QScrollBar::add-page, QScrollBar::sub-page {
     background: none;
 }
+
+QFrame[frameShape="4"] {
+    background-color: {hover_color};
+}
