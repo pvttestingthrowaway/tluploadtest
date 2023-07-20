@@ -1,6 +1,7 @@
 import datetime
 import gc
 import io
+import logging
 import os
 import platform
 import queue
@@ -10,6 +11,9 @@ import threading
 import faster_whisper
 import openai
 from faster_whisper.transcribe import TranscriptionInfo
+
+from utils import helper
+
 
 class Recognizer:
     def __init__(self, runLocal, modelSize=None, apiKey=None):
@@ -30,7 +34,7 @@ class Recognizer:
         while True:
             wavBytes = None
             try:
-                print("Recognizer waiting...")
+                helper.logger.debug("Recognizer waiting...")
                 audioData = self.audioQueue.get(timeout=10)
                 wavBytes = audioData["audio"]
                 resultQueue = audioData["queue"]
@@ -41,9 +45,8 @@ class Recognizer:
             except queue.Empty:
                 continue
             finally:
-                print(self.interruptEvent.is_set())
                 if self.interruptEvent.is_set():
-                    print("Recognizer exiting...")
+                    helper.logger.debug("Recognizer exiting...")
                     if self.model is not None:
                         del self.model  #This is just to ensure the allocated resources are free'd up correctly.
                         import torch
@@ -52,7 +55,7 @@ class Recognizer:
                         gc.collect()
                     return
 
-            print("Running recognition...")
+            helper.logger.debug("Running recognition...")
             if self.runLocal:
                 segments, info = self.model.transcribe(io.BytesIO(wavBytes), beam_size=5, vad_filter=True)
                 info:TranscriptionInfo
@@ -71,7 +74,7 @@ class Recognizer:
                 if segment.no_speech_prob < 0.70:
                     recognizedText += " " + segment.text.strip()
                 else:
-                    print(f"Skipping segment {segment.text} with {segment.no_speech_prob*100}% chance of being non-speech")
+                    helper.logger.warning(f"Skipping segment {segment.text} with {segment.no_speech_prob*100}% chance of being non-speech")
             recognizedText = recognizedText.strip()
 
             hallucinated = False
@@ -82,13 +85,12 @@ class Recognizer:
             for hallucination in hallucinations:
                 if hallucination.lower() in recognizedText.lower():
                     if len(recognizedText) < len(hallucination)+5:
-                        print("Had a likely hallucination. Skipping.")
                         hallucinated = True
             if hallucinated:
-                print("Hallucinating, ignoring it...")
+                helper.logger.warning("Hallucinating, ignoring it...")
                 continue
 
-            print(f"recognizedText: {recognizedText}")
+            helper.logger.debug(f"recognizedText: {recognizedText}")
 
             resultQueue.put({
                     "text":recognizedText,

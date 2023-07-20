@@ -2,6 +2,7 @@ import copy
 import datetime
 import gc
 import json
+import logging
 import os
 import platform
 import shutil
@@ -310,7 +311,6 @@ class MainWindow(QtWidgets.QDialog):
         yourVirtualOutput = virtualDevices["you"]["output"]
         theirVirtualInput = virtualDevices["them"]["input"]
 
-        # TODO: remove this because it's only for testing
         # theirVirtualInput = "Microphone (USB-MIC) - 5"
 
         if yourVirtualOutput is None or theirVirtualInput is None:
@@ -329,10 +329,10 @@ class MainWindow(QtWidgets.QDialog):
         messageBox.setStandardButtons(QMessageBox.StandardButton.NoButton)  # No buttons
         signalEmitter = SignalEmitter()
         signalEmitter.signal.connect(lambda: messageBox.done(0))
-        helper.print_usage_info("Before interpreter setup")
+        helper.log_usage_info("Before interpreter setup")
         def interpreter_setup():
             self.yourInterpreter = Interpreter(settings["audio_input_device"], yourVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=yoursrSettings)
-            helper.print_usage_info("After your interpreter")
+            helper.log_usage_info("After your interpreter")
 
             if cloneNew:
                 self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),
@@ -340,7 +340,7 @@ class MainWindow(QtWidgets.QDialog):
             else:
                 self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"],
                                                     voiceIDOrName=self.voicePicker.combo_box.currentText(), srSettings=theirsrSettings)
-            helper.print_usage_info("After their interpreter")
+            helper.log_usage_info("After their interpreter")
             signalEmitter.signal.emit()
 
 
@@ -348,7 +348,7 @@ class MainWindow(QtWidgets.QDialog):
         interpreterThread.start()
         QTimer.singleShot(1, lambda: (messageBox.activateWindow(), messageBox.raise_()))
         messageBox.exec()
-        print("Interpreter setup completed")
+        helper.logger.debug("Interpreter setup completed")
 
         self.set_state("active")
         self.reset_active_layout()
@@ -428,17 +428,17 @@ class MainWindow(QtWidgets.QDialog):
 
 
     def micbutton_click(self):
-        print("Clicked mic button")
+        helper.logger.debug("Clicked mic button")
         if self.micButton.getColor() == helper.colors_dict['red']:
             #Already paused
-            print("Unpausing mic")
+            helper.logger.debug("Unpausing mic")
             self.activeLabels["you"]["info"].setText("Click to mute yourself")
             self.micButton.setColor(helper.colors_dict['green'])
             self.yourInterpreter.detector_paused = False
             self.micButton.setAccessibleDescription("Allows you to mute yourself. You are currently not muted.")
         else:
             #Not paused
-            print("Pausing mic")
+            helper.logger.debug("Pausing mic")
             self.activeLabels["you"]["info"].setText("Click to unmute yourself")
             self.micButton.setColor(helper.colors_dict['red'])
             self.yourInterpreter.detector_paused = True
@@ -448,17 +448,17 @@ class MainWindow(QtWidgets.QDialog):
 
 
     def speakerbutton_click(self):
-        print("Clicked speaker button")
+        helper.logger.debug("Clicked speaker button")
         if self.speakerButton.getColor() == helper.colors_dict['red']:
             # Already paused
-            print("Unpausing speaker")
+            helper.logger.debug("Unpausing speaker")
             self.activeLabels["them"]["info"].setText("Click to mute them")
             self.speakerButton.setColor(self.speakerButton.getPreviousColor())
             self.theirInterpreter.synthetizer_paused = False
             self.micButton.setAccessibleDescription("Allows you to mute the other user. They are currently not muted.")
         else:
             # Not paused
-            print("Pausing speaker")
+            helper.logger.debug("Pausing speaker")
             self.activeLabels["them"]["info"].setText("Click to unmute them")
             self.speakerButton.setColor(helper.colors_dict['red'])
             self.theirInterpreter.synthetizer_paused = True
@@ -497,9 +497,7 @@ class MainWindow(QtWidgets.QDialog):
         def interpreter_shutdown():
             self.yourInterpreter.set_interrupts()
             self.theirInterpreter.set_interrupts()
-            print("Exiting your interpreter...")
             self.yourInterpreter.stop_interpretation()
-            print("Exiting their interpreter...")
             self.theirInterpreter.stop_interpretation()
 
             signalEmitter.signal.emit()
@@ -508,7 +506,7 @@ class MainWindow(QtWidgets.QDialog):
         shutdownThread.start()
         QTimer.singleShot(1, lambda: (messageBox.activateWindow(), messageBox.raise_()))
         messageBox.exec()
-        print("Interpreter shutdown completed")
+        helper.logger.debug("Interpreter shutdown completed")
 
         if self.transcript is not None:
             #Flush it, close it, reopen it and write the finalized version

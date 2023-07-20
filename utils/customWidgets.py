@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 import sys
@@ -386,7 +387,6 @@ class LabeledSlider(QtWidgets.QWidget):
     def on_value_changed(self, value):
         if self.labels is not None:
             labelValue = self.labels[value]
-            print(f"Slider label: {labelValue}")
         return
 
 
@@ -458,7 +458,6 @@ class TwoListSelection(QtWidgets.QWidget):
         self.updateConfigItems()
 
     def updateConfigItems(self):
-        print(self.get_right_elements())
         settings[self.configKey] = self.get_right_elements()
 
     @QtCore.pyqtSlot()
@@ -577,7 +576,6 @@ class FileDownloadThread(DownloadThread):
             self.setProgressBarTotalSignal.emit(total_size_in_bytes)
 
         block_size = 1024 * 16
-        print(-1)
         try:
             response.raise_for_status()
             file = open(self.location, 'wb')
@@ -597,13 +595,13 @@ class FileDownloadThread(DownloadThread):
                     if current_time - last_emit_time >= 1:
                         elapsed_time_since_last_emit = current_time - last_emit_time
                         download_speed = data_received_since_last_emit / elapsed_time_since_last_emit
-                        print(f"Download speed: {download_speed / 1024 / 1024:.2f} MBps")
+                        helper.logger.debug(f"Download speed: {download_speed / 1024 / 1024:.2f} MBps")
 
                         # Calculate ETA
                         remaining_data = total_size_in_bytes - total_data_received
                         if download_speed != 0:  # Avoid division by zero
                             eta = int(remaining_data / download_speed)
-                            print(f"ETA: {eta} seconds")
+                            helper.logger.debug(f"ETA: {eta} seconds")
                             self.etaSignal.emit(eta)
                         self.updateProgressSignal.emit(int((total_data_received / total_size_in_bytes) * 100))
                         # Reset tracking variables for the next X seconds
@@ -614,7 +612,7 @@ class FileDownloadThread(DownloadThread):
             file.close()
 
         except requests.exceptions.RequestException as e:
-            print(e)
+            helper.logger.exception(e)
             if os.path.exists(self.location):
                 os.remove(self.location)
             raise
@@ -630,7 +628,6 @@ class SignalOutputStream(io.StringIO):
         super().write(s)  # Optionally, write the output to a buffer
         # Do something with the output. For example, extract the progress and update your UI
         if "downloading" in s.lower() and "model.bin" in s.lower():
-            print(s)
             try:
                 # Extract completion percentage
                 completion_match = re.search(r"(\d+)%", s)
@@ -646,14 +643,14 @@ class SignalOutputStream(io.StringIO):
 
 
                 #Esoteric math oneliner for literally no reason
-                print(f"Completion: {completion}%, ETA:{eta}s")
+                helper.logger.debug(f"Completion: {completion}%, ETA:{eta}s")
                 if completion is not None:
                     self.progressSignal.emit(completion)
                 if eta is not None:
                     self.etaSignal.emit(eta)
             except Exception as e:
-                print(f"Caught {e}")
-                print("")
+                helper.logger.error("Error in ETA/Completion calculation:")
+                helper.logger.exception(e)
 
 class ModelDownloadThread(DownloadThread):
     setProgressBarTotalSignal = QtCore.pyqtSignal(int)

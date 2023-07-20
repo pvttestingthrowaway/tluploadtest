@@ -1,4 +1,5 @@
 import datetime
+import logging
 import platform
 import queue
 import threading
@@ -317,11 +318,9 @@ class OptionalAPIInput(SetupDialog):
         self.audo_api_key.setVisible(self.audo_toggle.get_value() == 0)
 
     def audo_toggle_visibility(self, visible):
-        print(f"Audo visibility set to {visible}.")
         self.audo_api_key.setVisible(visible)
 
     def deepl_toggle_visibility(self, visible):
-        print(f"DeepL visibility set to {visible}.")
         self.deepl_api_key.setVisible(visible)
 
 class TranscriptInput(SetupDialog):
@@ -348,7 +347,6 @@ class TranscriptInput(SetupDialog):
         self.transcript_save_location.setVisible(self.transcript_toggle.get_value() == 0)
 
     def transcript_toggle_visibility(self, visible):
-        print(f"Audo visibility set to {visible}.")
         self.transcript_save_location.setVisible(visible)
 
 class SpeechDetectInput(SetupDialog):
@@ -421,14 +419,14 @@ class SpeechDetectInput(SetupDialog):
                 try:
                     queueData: dict = audioDataQueue.get(timeout=10)
                 except queue.Empty:
-                    print("Couldn't get an item from the queue within the timeout...")
+                    helper.logger.debug("Couldn't get an item from the queue within the timeout...")
                     continue
                 finally:
                     if stopRecEvent.is_set():
-                        print("Stopping detection sample...")
+                        helper.logger.debug("Stopping detection sample...")
                         break
                 # Got an item from the queue, update the messagebox timestamp.
-                print("Got an item from the queue.")
+                helper.logger.debug("Got an item from the queue.")
                 signalEmitter.signal.emit(queueData["endTime"].strftime("%H:%M:%S"))
 
         signalEmitter.signal.connect(update_message_box)

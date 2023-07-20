@@ -1,3 +1,4 @@
+import logging
 import queue
 import threading
 from typing import Optional
@@ -62,7 +63,7 @@ class Translator:
                     return
 
             textToTL = tlData["text"]
-            print(f"Translating {tlData['text']} from {tlData['lang']}")
+            print(f"Translating from {tlData['lang']}...")
             sourceLang = tlData["lang"].lower()
             resultText = None
             if self.deepLTranslator is not None:
@@ -89,6 +90,8 @@ class Translator:
                         break
                     except TypeError:
                         counter += 1
+                if counter >= 10:
+                    helper.logger.error("Unable to contact google translate after 10 retries. Giving up.")
 
             signalData = {
                 "recognized": textToTL,
@@ -99,5 +102,5 @@ class Translator:
 
             textReadySignal.emit(signalData)
 
-            print(f"translatedText: {resultText.text}")
+            helper.logger.debug(f"Done translating.")
             self.ttsQueue.put(resultText.text)

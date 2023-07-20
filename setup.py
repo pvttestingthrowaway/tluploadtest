@@ -1,4 +1,5 @@
 import fnmatch
+import logging
 import shutil
 import subprocess
 import platform
@@ -9,6 +10,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from utils.customWidgets import *
+
 
 #Helper functions for ffmpeg download/extract
 def download_ffmpeg():
@@ -67,6 +69,7 @@ def main():
         currentOS = platform.system()
         if currentOS != "Windows" and currentOS != "Darwin":
             message_box = QMessageBox()
+            helper.logger.error("FFmpeg is missing, but your OS is not supported for auto-download. Please install it yourself.")
             message_box.setText("FFmpeg is missing, but your OS is not supported for auto-download. Please install it yourself.")
             QTimer.singleShot(1, lambda: (message_box.activateWindow(), message_box.raise_()))
             message_box.exec()

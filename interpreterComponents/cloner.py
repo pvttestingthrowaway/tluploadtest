@@ -1,3 +1,4 @@
+import logging
 import os
 import queue
 import threading
@@ -37,14 +38,14 @@ class Cloner:
                 continue
             finally:
                 if self.interruptEvent.is_set():
-                    print("Cloner main loop exiting...")
+                    helper.logger.debug("Cloner main loop exiting...")
                     return None
-            print("Recieved audioSegment to clean.")
+            helper.logger.debug("Recieved audioSegment to clean.")
 
             if isinstance(wavData, bytes):
                 threading.Thread(target=self.clean_audio, args=(wavData, cloneProgressSignal)).start()
             else:
-                print("We have enough audio data to create a clone.")
+                helper.logger.debug("We have enough audio data to create a clone.")
                 cloneProgressSignal.emit(f"PROCESSING")
 
                 finalizedAudioBytes = list()
@@ -112,7 +113,7 @@ class Cloner:
                 i += 1
 
 
-        print(f"Processing audio {i}.")
+        helper.logger.debug(f"Processing audio {i}.")
         audio = AudioSegment.from_file_using_temporary_files(io.BytesIO(wavBytes))
         audio = effects.normalize(audio)
         target_dBFS = -20
@@ -121,9 +122,9 @@ class Cloner:
         with open(f"Normalized_{i}.wav", "wb") as fp:
             normalizedAudio.export(fp, format="wav")
 
-        print(f"Normalized audio {i}.")
+        helper.logger.debug(f"Normalized audio {i}.")
         if self.noiseRemoval is not None:
-            print(f"Removing noise from {i}")
+            helper.logger.debug(f"Removing noise from {i}")
             mp3Bytes = io.BytesIO()
             #Turn into mp3 for smaller upload filesize
             normalizedAudio.export(mp3Bytes, format="mp3")
@@ -134,20 +135,21 @@ class Cloner:
                 cleanedAudio = AudioSegment.from_file_using_temporary_files(io.BytesIO(self.download_to_bytes(result.url)))
                 with open(f"Cleaned_{i}.wav", "wb") as fp:
                     cleanedAudio.export(fp, format="wav")
-                print(f"Removed noise from {i}")
+                helper.logger.debug(f"Removed noise from {i}")
                 finalAudio = cleanedAudio
             except requests.exceptions.ConnectTimeout:
+                helper.logger.error("Unable to contact audo.ai API, using non-cleaned audio.")
                 finalAudio = normalizedAudio
         else:
             finalAudio = normalizedAudio
 
-        print(f"Adding {i} to final queue")
+        helper.logger.debug(f"Adding {i} to final queue")
         with self.durationLock:
             self.processedAudioQueue.put(finalAudio)
             self.totalDuration += finalAudio.duration_seconds
             cloneProgressSignal.emit(f"{self.totalDuration}")
             if self.totalDuration > requiredDuration and not self.dataComplete:
-                print(f"After {i} we have enough data to begin.")
+                helper.logger.debug(f"After {i} sound segments we have enough data to begin the clone.")
                 self.dataComplete = True
                 self.cloneQueue.put("dataComplete")
                 self.processedAudioQueue.put(None)  #Mark the end of the processed audios

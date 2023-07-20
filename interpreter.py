@@ -1,5 +1,6 @@
 #Wrapper class for recognizer > translator > synthetizer
 import gc
+import logging
 import queue
 import threading
 from typing import Optional
@@ -46,7 +47,7 @@ class Interpreter(QObject):
 
         modelSize = helper.modelSizes[settings["model_size"]]
         if runLocal:
-            print(f"Using {modelSize} for faster-whisper")
+            helper.logger.debug(f"Using {modelSize} for faster-whisper")
         xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
 
         placeHolderVoiceID = settings["placeholder_ai_voice"]
@@ -80,7 +81,7 @@ class Interpreter(QObject):
             self.interruptEvents.append(self.cloner.interruptEvent)
 
     def begin_interpretation(self):
-        helper.print_usage_info("Before begin interpretation")
+        helper.log_usage_info("Before begin interpretation")
         self.threads.append(threading.Thread(target=self.detector.main_loop))
         self.threads.append(threading.Thread(target=self.translator.main_loop, args=(self.textReadySignal,)))
         self.threads.append(threading.Thread(target=self.synthetizer.main_loop))
@@ -94,8 +95,7 @@ class Interpreter(QObject):
         if Interpreter.wRecognizerThread is not None and not Interpreter.wRecognizerThread.is_alive():
             Interpreter.wRecognizerThread.start()
 
-        helper.print_usage_info("After begin interpretation")
-        print("Intepretation started.")
+        helper.log_usage_info("After begin interpretation")
 
     def set_interrupts(self):
         with Interpreter.GIL:

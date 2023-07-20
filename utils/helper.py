@@ -11,6 +11,7 @@ import elevenlabslib
 import googletrans
 import httpcore
 import psutil
+import logging
 import pynvml
 import sounddevice
 import unicodedata
@@ -21,6 +22,7 @@ from elevenlabslib import ElevenLabsUser
 
 
 rootDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+logsDir = os.path.join(rootDir, "logs")
 cacheDir = os.path.join(rootDir, "cache")
 resourcesDir = os.path.join(rootDir,"resources")
 langNamesPath = os.path.join(resourcesDir, "langnames.json")
@@ -33,6 +35,19 @@ translator = googletrans.Translator()
 with open(langNamesPath, "r", encoding="utf8") as fp:
     languages_translated = json.load(fp)
 
+#Logging setup...
+logger = logging.getLogger(__name__)
+debug_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-debug.log'))
+error_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-error.log'))
+debug_handler.setLevel(logging.DEBUG)
+error_handler.setLevel(logging.ERROR)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+debug_handler.setFormatter(formatter)
+error_handler.setFormatter(formatter)
+
+logger.addHandler(debug_handler)
+logger.addHandler(error_handler)
 
 
 default_settings = {
@@ -121,13 +136,13 @@ def get_googletrans_native_langnames(currentLang):
             translated_name = None
             while counter < 10:
                 try:
-                    print(f"Couldn't find {name} ({code}), translating it...")
+                    logger.debug(f"Couldn't find {name} ({code}), translating it...")
                     translated_name = translator.translate(name, dest=code).text
                     break
                 except TypeError:
                     counter += 1
                 except httpcore.TimeoutException:
-                    print("Timeout error when trying to use google translate. Not going to translate.")
+                    logger.error("Timeout error when trying to use google translate. Not going to translate.")
                     break
 
             if translated_name is not None:
@@ -160,13 +175,13 @@ def get_googletrans_native_langnames(currentLang):
 
 def tl_cache_prep(target_language):
     langCode = get_code_from_langstring(target_language)
-    print(f"Preparing tl cache for {langCode}")
+    logger.debug(f"Preparing tl cache for {langCode}")
     #Bulk-translate all strings at once.
 
     # Extract all the keys (UI text to be translated)
     untranslated = [ui_text for ui_text in tlCache.keys() if langCode not in tlCache[ui_text]]
     if len(untranslated) == 0:
-        print("No text to translate. Return.")
+        logger.debug("No text to translate. Return.")
         return
 
     max_char_per_request = 2500
@@ -202,7 +217,7 @@ def tl_cache_prep(target_language):
             except (TypeError, httpcore.TimeoutException):
                 pass
         if chunk_translations is None:
-            print("Could not contact googletrans after 20 tries. Giving up.")
+            logger.error("Could not contact googletrans after 20 tries. Giving up.")
             return
         translations.extend(chunk_translations)
 
@@ -210,7 +225,6 @@ def tl_cache_prep(target_language):
     if len(untranslated) != len(translations):
         return
 
-    print("")
     # Update the JSON data with the translations
     for ui_text, translated_text in zip(untranslated, translations):
         if langCode not in tlCache[ui_text]:
@@ -252,11 +266,11 @@ def translate_ui_text(text, cacheKey=None, cacheSkip=False, languageOverride=Non
             except TypeError:
                 counter += 1
             except httpcore.TimeoutException:
-                print("Timeout error when trying to use google translate. Not going to translate.")
+                logger.error("Timeout error when trying to use google translate. Not going to translate.")
                 break
 
         if translatedText is None:
-            print("Failed to get translation. Not translating.")
+            logger.error("Failed to get translation. Not translating.")
             translatedText = text
             translatedText = translatedText[0].upper() + translatedText[1:]
         else:
@@ -316,7 +330,7 @@ def get_list_of_portaudio_devices(deviceType:str, includeVirtual=False) -> list[
                             deviceIsActive = True
                             break
                     if not deviceIsActive:
-                        print(f"Device {device['name']} was skipped due to being marked inactive by CoreAudio.")
+                        logger.debug(f"Device {device['name']} was skipped due to being marked inactive by CoreAudio.")
                 else:
                     if "VB-Audio" not in device["name"] or includeVirtual:
                         deviceNames.append(device["name"] + " - " + str(device["index"]))
@@ -503,6 +517,7 @@ def find_model_bin(root_dir):
     return False  # "model.bin" not found in any directories, return False
 
 def show_msgbox_and_exit(text, url=None, urlBtnText=None, exitCode=1):
+    logger.error(f"Requested exit with message {text}")
     msgBox = QtWidgets.QMessageBox()
     msgBox.setIcon(QtWidgets.QMessageBox.Icon.Critical)
     msgBox.setText(translate_ui_text(text))
@@ -517,18 +532,17 @@ def show_msgbox_and_exit(text, url=None, urlBtnText=None, exitCode=1):
 
     exit(exitCode)
 
-def print_usage_info(codeID):
-    print("===================RESOURCE USAGE STATS===================")
-    print(codeID)
+def log_usage_info(codeID):
+    logger.debug("===================RESOURCE USAGE STATS===================")
+    logger.debug(codeID)
     try:
         from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
         nvmlInit()
         h = nvmlDeviceGetHandleByIndex(0)
         info = nvmlDeviceGetMemoryInfo(h)
-        print(f"VRAM usage: {round(info.used / pow(10, 9), 2)}GB")
+        logger.debug(f"VRAM usage: {round(info.used / pow(10, 9), 2)}GB")
     except pynvml.NVMLError:
         pass    #No NVIDIA GPU probably.
 
     process = psutil.Process(os.getpid())
-    print(f"RAM usage: {round(process.memory_info().rss / pow(10, 9), 2)}GB")
-    print("")
+    logger.debug(f"RAM usage: {round(process.memory_info().rss / pow(10, 9), 2)}GB")

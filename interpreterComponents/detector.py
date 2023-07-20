@@ -1,5 +1,6 @@
 import datetime
 import gc
+import logging
 import os
 import platform
 import queue
@@ -19,7 +20,7 @@ class Detector:
         self.srMic = sr.Microphone(device_index=self.microphoneInfo["index"], sample_rate=int(self.microphoneInfo["default_samplerate"]))
         self.srRecognizer = sr.Recognizer()
         self.srRecognizer.non_speaking_duration = 0.5
-        print(srSettings)
+        helper.logger.debug(f"Starting detector with settings: {srSettings}")
         self.srRecognizer.energy_threshold = int(srSettings[0])
         self.srRecognizer.dynamic_energy_threshold = srSettings[1]
         self.srRecognizer.pause_threshold = float(srSettings[2])
@@ -42,21 +43,20 @@ class Detector:
 
             while True:
                 self.isRunning.wait()  #Wait until we're running. This ensures that we don't accidentally record while muted.
-                print("Detecting audio...")
+                helper.logger.debug("Detecting audio...")
                 try:
                     audio:sr.AudioData = self.srRecognizer.listen(source, timeout=20, phrase_time_limit=60)
                     #If you manage to speak a single sentence longer than 1 minute, congrats and f*** you.
                     #This is to force it to exit in cases with high background noise, which gets detected as speech.
                     #I have no idea what a better fix would be.
                 except sr.WaitTimeoutError:
-                    print("Audio rec interrupted")
                     continue
                 finally:
                     if self.interruptEvent.is_set():
-                        print("Detector exiting...")
+                        helper.logger.debug("Detector exiting...")
                         break
 
-                print(f"Audio detected on {self.srMic.device_index}.")
+                helper.logger.debug(f"Audio detected on {self.srMic.device_index}.")
                 audioData = {
                     "audio":audio.get_wav_data(),
                     "queue":self.resultQueue,
@@ -69,5 +69,5 @@ class Detector:
                 if self.audioQueue is not None:
                     self.audioQueue.put_nowait(audioData)
                 else:
-                    print("wRecognizer is none.")
+                    helper.logger.warning("wRecognizer is none.")
 

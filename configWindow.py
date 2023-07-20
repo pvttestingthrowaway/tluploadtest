@@ -62,9 +62,6 @@ class SpeechRecWidget(QtWidgets.QWidget):
         for i in range(3):
             self.layout.setColumnStretch(i, 1)
 
-    def on_change(self, text):
-        print(f"Selected option: {text}")
-
 class LocalWidgets(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -117,9 +114,6 @@ class WhisperWidgets(QtWidgets.QWidget):
         self.layout.setColumnStretch(0, 1)
         self.layout.setColumnStretch(2, 1)
 
-    def on_change(self, text):
-        print("New openAI API Key: " + text)
-
 
 #Note: This class is entirely unused. I was thinking of implementing azure support (like I did for Echo-XI) but 5 hours of speech rec (the free amount per month) cost just 2$ on Whisper.
 #In short, not worth the dev time, given it's by far the most complex one to implement.
@@ -156,9 +150,6 @@ class AzureWidgets(QtWidgets.QWidget):
 
         self.layout.addWidget(self.centralLabel, 1, 1, 1, 1)
         self.layout.addWidget(self.list_selection, 2, 0, 4, 3)
-
-    def on_change(self, text):
-        print(f"Selected option: {text}")
 
 class ConfigDialog(LocalizedDialog):
     def __init__(self):
@@ -578,15 +569,12 @@ class ConfigDialog(LocalizedDialog):
     def cancel_clicked(self):
         self.close()
     def transcript_toggle_visibility(self, visible):
-        print(f"Transcription storage visibility set to {visible}.")
         self.transcript_save_location.setVisible(visible)
 
     def audo_toggle_visibility(self, visible):
-        print(f"Audo visibility set to {visible}.")
         self.audo_api_key.setVisible(visible)
 
     def deepl_toggle_visibility(self, visible):
-        print(f"DeepL visibility set to {visible}.")
         self.deepl_api_key.setVisible(visible)
 
     def on_local(self):

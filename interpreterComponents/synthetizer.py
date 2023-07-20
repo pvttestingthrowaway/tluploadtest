@@ -1,3 +1,4 @@
+import logging
 import queue
 import threading
 from elevenlabslib import GenerationOptions, PlaybackOptions
@@ -25,7 +26,6 @@ class Synthesizer:
         if isPlaceHolder:
             self.placeHolderVoice = self.user.get_voice_by_ID(voiceID)
             self.placeHolderVoice.edit_settings(stability=0.65, similarity_boost=0.5)
-            print(f"A new voice will be created. Eventually.")
         else:
             self.ttsVoice = self.user.get_voice_by_ID(voiceID)
             self.ttsVoice.edit_settings(stability=0.65, similarity_boost=0.5)
@@ -49,11 +49,11 @@ class Synthesizer:
                 continue
             finally:
                 if self.interruptEvent.is_set():
-                    print("Synthetizer main loop exiting...")
+                    helper.logger.debug("Synthetizer main loop exiting...")
                     return
 
             if self.isRunning.is_set():
-                print(f"Synthesizing prompt: {prompt}")
+                helper.logger.debug(f"Synthesizing prompt: {prompt}")
                 self.synthesizeAndPlayAudio(prompt)
 
     def synthesizeAndPlayAudio(self, prompt) -> None:
@@ -82,7 +82,7 @@ class Synthesizer:
                     continue
                 finally:
                     if self.interruptEvent.is_set():
-                        print("Synthetizer playback loop exiting...")
+                        helper.logger.debug("Synthetizer playback loop exiting...")
                         return
                 nextEvent.set()
                 break
