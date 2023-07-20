@@ -49,19 +49,19 @@ with open(langNamesPath, "r", encoding="utf8") as fp:
 
 #Logging setup...
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 debug_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-debug.log'))
 error_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-error.log'))
 debug_handler.setLevel(logging.DEBUG)
 error_handler.setLevel(logging.ERROR)
 
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 debug_handler.setFormatter(formatter)
 error_handler.setFormatter(formatter)
 
 logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
-
 
 default_settings = {
     "voice_recognition_type": 0,
