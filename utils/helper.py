@@ -22,7 +22,19 @@ from elevenlabslib import ElevenLabsUser
 
 
 rootDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-logsDir = os.path.join(rootDir, "logs")
+
+parentDir = os.path.dirname(rootDir)
+if os.path.exists(os.path.join(parentDir, "install.py")):
+    #We're running under the installer. Handle it accordingly.
+    logsDir = os.path.join(parentDir, "logs")
+else:
+    #We're (probably) running under an IDE. Just put the logs in the rootDir.
+    logsDir = os.path.join(rootDir, "logs")
+
+# Create the logs directory if it doesn't exist
+if not os.path.exists(logsDir):
+    os.makedirs(logsDir)
+
 cacheDir = os.path.join(rootDir, "cache")
 resourcesDir = os.path.join(rootDir,"resources")
 langNamesPath = os.path.join(resourcesDir, "langnames.json")
@@ -37,6 +49,7 @@ with open(langNamesPath, "r", encoding="utf8") as fp:
 
 #Logging setup...
 logger = logging.getLogger(__name__)
+
 debug_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-debug.log'))
 error_handler = logging.FileHandler(os.path.join(logsDir,'polyEcho-error.log'))
 debug_handler.setLevel(logging.DEBUG)
