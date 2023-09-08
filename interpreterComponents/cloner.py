@@ -2,6 +2,7 @@ import logging
 import os
 import queue
 import threading
+from dataclasses import dataclass
 from typing import Union
 
 import requests
@@ -18,12 +19,18 @@ from utils import helper
 
 requiredDuration = 180
 
+@dataclass
+class ClonerParams:
+    xiApikey: str
+    voiceName: str
+    audoApiKey: str = None
+
 class Cloner:
-    def __init__(self, cloneQueue, xiApikey, voiceName, audoApiKey=None):
+    def __init__(self, params:ClonerParams, cloneQueue:queue.Queue):
         self.cloneQueue = cloneQueue
-        self.voiceName = voiceName
-        self.user = helper.get_xi_user(xiApikey)
-        self.noiseRemoval = None if audoApiKey is None or audoApiKey == "" else helper.get_audo_client(apiKey=audoApiKey, exitOnFail=True)
+        self.voiceName = params.voiceName
+        self.user = helper.get_xi_user(params.xiApikey)
+        self.noiseRemoval = None if params.audoApiKey is None or params.audoApiKey == "" else helper.get_audo_client(apiKey=params.audoApiKey, exitOnFail=True)
         self.interruptEvent = threading.Event()
         self.processedAudioQueue = queue.Queue()
         self.totalDuration:float = 0.0

@@ -403,33 +403,41 @@ def get_portaudio_device_info_from_name(deviceName:str, deviceType:str):
 def get_list_of_voices(user:ElevenLabsUser|None):
     if user is None:
         return []
-    return  [f"{voice.initialName} - {voice.voiceID}" for voice in user.get_available_voices()]
+    return  [f"{voice.initialName}{f' (PVC)' if voice.category == 'professional' else ''} - {voice.voiceID}" for voice in user.get_available_voices()]
 
-def get_supported_languages(user:ElevenLabsUser|None):
+modelsCache = dict()
+
+def get_supported_languages(user:ElevenLabsUser|None, modelID:str):
     if user is None:
         return []
-    models = user.get_available_models()
-    nameList = [model["name"].lower() for model in models]
-    v2Model = None
 
-    for name in nameList:
-        if "multilingual_v2" in name:
-            v2Model = name
+    global modelsCache
+    if user not in modelsCache:
+        modelsCache[user] = user.get_models()
 
-    for model in models:
-        if v2Model is not None and model["name"].lower() == v2Model:
-            # Found the multilingual v2 model
-            return [f"{language['name']} - {language['language_id']}" for language in model["languages"]]
-
-        if "multilingual" in model["name"].lower():
-            #Found the multilingual model
-            return [f"{language['name']} - {language['language_id']}" for language in model["languages"]]
+    #We only hit the endpoint once per user per run - no reason to do it multiple times.
+    for model in modelsCache[user]:
+        if model.modelID == modelID:
+            return [f"{language['name']} - {language['language_id']}" for language in model.supportedLanguages]
 
     return []
 
+def get_models_localized(user: ElevenLabsUser | None, languageToLocalizeIn:str=None):
+    if languageToLocalizeIn is None:
+        languageToLocalizeIn = settings["ui_language"]
+    idList = list()
+    for model in user.get_models():
+        for language in model.supportedLanguages:
+            if "en" not in language["language_id"]:
+                idList.append(f"{translate_ui_text(model.name.replace('Eleven Multilingual',''), cacheKey='models_list', cacheSkip=True,languageOverride=languageToLocalizeIn)} - {model.modelID}")
+                break
+    return idList
 
-def get_supported_languages_localized(user:ElevenLabsUser|None, languageToLocalizeIn:str):
-    langList = get_supported_languages(user)
+def get_supported_languages_localized(user:ElevenLabsUser|None, modelID:str, languageToLocalizeIn:str=None):
+    if languageToLocalizeIn is None:
+        languageToLocalizeIn = settings["ui_language"]
+
+    langList = get_supported_languages(user, modelID)
     if len(langList) == 0:
         return langList
     langPairs = [(language.split(" - ")[0], language.split(" - ")[1]) for language in langList]

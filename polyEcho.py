@@ -142,6 +142,12 @@ class MainWindow(QtWidgets.QDialog):
 
         return active_layout
 
+    def update_output_lang_options(self, modelInput:LabeledInput, languageInput:LabeledInput):
+        selected_model = modelInput.get_value().split(" - ")[1]
+        languages = helper.get_supported_languages_localized(self.user, selected_model, settings["ui_language"])
+        languageInput.combo_box.clear()
+        languageInput.combo_box.addItems(languages)
+
     def init_inactive_state(self) -> QGridLayout:
         # Initialize layout
         inactive_layout = QtWidgets.QGridLayout(self)
@@ -149,32 +155,57 @@ class MainWindow(QtWidgets.QDialog):
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
         self.user: elevenlabslib.ElevenLabsUser = helper.get_xi_user(apiKey, exitOnFail=False)
 
+        #0th row
+        self.your_model = LabeledInput(
+            "Your TTS model",
+            configKey="your_model",
+            data=helper.get_models_localized(self.user),
+            fixedComboBoxSize=None,
+            info="The model you would like to use for your speech.<br>v1 is faster, but supports less languages.<br>If you're using a Professional Voice Clone (PVC) v1 will also be of much higher quality."
+        )
+        inactive_layout.addWidget(self.your_model, 0, 0)
+
+        self.their_model = LabeledInput(
+            "Their TTS model",
+            configKey="their_model",
+            data=helper.get_models_localized(self.user),
+            fixedComboBoxSize=None,
+            info="The model you would like to use for their speech.<br>v1 is faster, but supports less languages."
+        )
+        inactive_layout.addWidget(self.their_model, 0, 2)
+
         # First row
         self.your_output_lang = LabeledInput(
             "Your target language",
             configKey = "your_output_language",
-            data=helper.get_supported_languages_localized(self.user, settings["ui_language"]),
+            data=[],
             fixedComboBoxSize=None,
             info="The language you would like your TTS voice to speak in."
         )
-        inactive_layout.addWidget(self.your_output_lang, 0, 0)
+        inactive_layout.addWidget(self.your_output_lang, 1, 0)
 
         self.their_output_lang = LabeledInput(
             "Their target language",
             configKey="their_output_language",
-            data = helper.get_supported_languages_localized(self.user, settings["ui_language"]),
+            data = [],
             fixedComboBoxSize=None,
             info="The language you would like their TTS voice to speak in."
         )
-        inactive_layout.addWidget(self.their_output_lang, 0, 2)
+        inactive_layout.addWidget(self.their_output_lang, 1, 2)
 
+
+        self.your_model.combo_box.currentIndexChanged.connect(lambda: self.update_output_lang_options(self.your_model, self.your_output_lang))
+        self.their_model.combo_box.currentIndexChanged.connect(lambda: self.update_output_lang_options(self.their_model, self.their_output_lang))
+
+        self.update_output_lang_options(self.your_model, self.your_output_lang)
+        self.update_output_lang_options(self.their_model, self.their_output_lang)
 
         self.nameInput = LabeledInput(
             "Insert the name for the new voice",
             info="The placeholder voice defined in settings will be used until the clone is complete.",
             configKey="name_input"
         )
-        inactive_layout.addWidget(self.nameInput, 2, 1)
+        inactive_layout.addWidget(self.nameInput, 3, 1)
         self.nameInput.line_edit.setFixedWidth(int(self.nameInput.line_edit.width() / 3))
 
 
@@ -186,7 +217,7 @@ class MainWindow(QtWidgets.QDialog):
         )
 
         self.voicePicker.combo_box.setFixedWidth(self.nameInput.line_edit.width())
-        inactive_layout.addWidget(self.voicePicker, 2, 1)
+        inactive_layout.addWidget(self.voicePicker, 3, 1)
         self.voiceType = None
         if self.user is not None and self.user.get_voice_clone_available():
             # Second row
@@ -197,7 +228,7 @@ class MainWindow(QtWidgets.QDialog):
                 configKey="voice_type",
                 info="Select whether you would like to copy the voice of the user you're speaking to.<br>If you choose \"Copy Theirs\", the selected placeholder voice will be used while the cloning process is running.<br>If you choose \"Re-use existing\", the selected voice will be used instead."
             )
-            inactive_layout.addWidget(self.voiceType, 1, 1)
+            inactive_layout.addWidget(self.voiceType, 2, 1)
         else:
             self.nameInput.setVisible(False)
             self.voicePicker.setVisible(True)
@@ -206,12 +237,12 @@ class MainWindow(QtWidgets.QDialog):
         # Third row
         settings_button = QPushButton(helper.translate_ui_text("Settings"))
         settings_button.clicked.connect(self.show_settings)  # connect to method
-        inactive_layout.addWidget(settings_button, 3, 0)
+        inactive_layout.addWidget(settings_button, 4, 0)
 
         self.start_button = QtWidgets.QPushButton(helper.translate_ui_text("Start"))
         self.start_button.setStyleSheet(f"background-color: {helper.colors_dict['green']}")
         self.start_button.clicked.connect(self.start_clicked)  # connect to method
-        inactive_layout.addWidget(self.start_button, 3, 2)
+        inactive_layout.addWidget(self.start_button, 4, 2)
 
         if self.user is None:
             self.start_button.setEnabled(False)
@@ -223,6 +254,23 @@ class MainWindow(QtWidgets.QDialog):
             inactive_layout.setRowStretch(i, 1)
 
         return inactive_layout
+
+    def iterate_widgets(self,layout):
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if widget is not None:
+                yield widget
+                if isinstance(widget, QtWidgets.QWidget):
+                    if callable(widget.layout):
+                        child_layout = widget.layout()
+                    else:
+                        child_layout = widget.layout
+                    if child_layout is not None:
+                        yield from self.iterate_widgets(child_layout)
+            else:
+                child_layout = layout.itemAt(i).layout()
+                if child_layout is not None:
+                    yield from self.iterate_widgets(child_layout)
 
     def start_clicked(self, dummyArgForMemProfiler=None):
         assert (self.user is not None)
@@ -240,7 +288,7 @@ class MainWindow(QtWidgets.QDialog):
                 msgBox.exec()
                 return
 
-            voiceMax = self.user.get_user_data()["voice_limit"]
+            voiceMax = self.user.get_subscription_data()["voice_limit"]
             currentVoiceAmount = len(self.user.get_available_voices())
             if currentVoiceAmount >= voiceMax:
                 msgBox = QtWidgets.QMessageBox()
@@ -272,8 +320,10 @@ class MainWindow(QtWidgets.QDialog):
                     return
 
         #Update settings
-        settings["your_output_language"] = self.your_output_lang.combo_box.currentText()
-        settings["their_output_language"] = self.their_output_lang.combo_box.currentText()
+        for widget in self.iterate_widgets(self.layout):
+            if hasattr(widget, 'configKey'):
+                #Read and save the config data.
+                settings[widget.configKey] = widget.get_value()
         helper.dump_settings()
 
         #Check audio device validity
@@ -319,10 +369,6 @@ class MainWindow(QtWidgets.QDialog):
             msgBox.exec()
             return
 
-        # audioInput:str, audioOutput:str, settings:dict, targetLang:str, voiceIDOrName:str
-        yoursrSettings = (settings["my_loudness_threshold"], False, settings["my_pause_time"])    #Removed dynamic_loudness
-        theirsrSettings = (settings["their_loudness_threshold"], False, settings["their_pause_time"])  # Removed dynamic_loudness
-
         messageBox = QMessageBox()
         messageBox.setWindowTitle(helper.translate_ui_text("Starting..."))
         messageBox.setText(helper.translate_ui_text("Setting up interpreters, please wait..."))
@@ -330,19 +376,68 @@ class MainWindow(QtWidgets.QDialog):
         signalEmitter = SignalEmitter()
         signalEmitter.signal.connect(lambda: messageBox.done(0))
         helper.log_usage_info("Before interpreter setup")
+        from interpreter import RecognizerParams, DetectorParams, TranslatorParams, SynthesizerParams, ClonerParams
         def interpreter_setup():
-            self.yourInterpreter = Interpreter(settings["audio_input_device"], yourVirtualOutput, settings, settings["your_output_language"], settings["your_ai_voice"], srSettings=yoursrSettings)
+            recognizerParams = RecognizerParams(
+                runLocal= settings["voice_recognition_type"] == 0,
+                apiKey = keyring.get_password("polyecho", "openai_api_key"),
+                modelSize=helper.modelSizes[settings["model_size"]]
+            )
+
+            yourDetectorParams = DetectorParams(
+                inputDevice=settings["audio_input_device"],
+                energy_threshold=settings["my_loudness_threshold"],
+                pause_threshold=settings["my_pause_time"],
+                dynamic_energy_threshold=False
+            )
+
+            yourTranslatorParams = TranslatorParams(
+                deeplAPIKey=keyring.get_password("polyecho", "deepl_api_key") if settings["deepl_enabled"] else "",
+                targetLang=settings["your_output_language"]
+            )
+
+            yourSynthesizerParams = SynthesizerParams(
+                apiKey = keyring.get_password("polyecho", "elevenlabs_api_key"),
+                outputDeviceName = yourVirtualOutput,
+                voiceID = settings["your_ai_voice"],
+                modelID = self.your_model.get_value()
+            )
+
+            self.yourInterpreter = Interpreter(recognizerParams, yourDetectorParams, yourTranslatorParams, yourSynthesizerParams)
             helper.log_usage_info("After your interpreter")
 
-            if cloneNew:
-                self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"], voiceIDOrName=self.nameInput.line_edit.text(),
-                                                    createNewVoice=True, srSettings=theirsrSettings)
-            else:
-                self.theirInterpreter = Interpreter(theirVirtualInput, settings["audio_output_device"], settings, settings["their_output_language"],
-                                                    voiceIDOrName=self.voicePicker.combo_box.currentText(), srSettings=theirsrSettings)
-            helper.log_usage_info("After their interpreter")
-            signalEmitter.signal.emit()
+            theirDetectorParams = DetectorParams(
+                inputDevice=theirVirtualInput,
+                energy_threshold=settings["their_loudness_threshold"],
+                pause_threshold=settings["their_pause_time"],
+                dynamic_energy_threshold=False
+            )
 
+            theirTranslatorParams = TranslatorParams(
+                deeplAPIKey=keyring.get_password("polyecho", "deepl_api_key") if settings["deepl_enabled"] else "",
+                targetLang=settings["their_output_language"]
+            )
+
+            theirSynthesizerParams = SynthesizerParams(
+                apiKey=keyring.get_password("polyecho", "elevenlabs_api_key"),
+                outputDeviceName=yourVirtualOutput,
+                voiceID= settings["placeholder_ai_voice"] if cloneNew else self.voicePicker.combo_box.currentText(),
+                modelID = self.their_model.get_value()
+            )
+
+            if cloneNew:
+                clonerParams = ClonerParams(
+                    xiApikey = keyring.get_password("polyecho", "elevenlabs_api_key"),
+                    voiceName = self.nameInput.line_edit.text(),
+                    audoApiKey = keyring.get_password("polyecho", "audo_api_key") if settings["audo_enabled"] else ""
+                )
+            else:
+                clonerParams = None
+
+            self.theirInterpreter = Interpreter(recognizerParams, theirDetectorParams, theirTranslatorParams, theirSynthesizerParams, clonerParams)
+            helper.log_usage_info("After their interpreter")
+
+            signalEmitter.signal.emit()
 
         interpreterThread = threading.Thread(target=interpreter_setup)
         interpreterThread.start()
@@ -466,7 +561,7 @@ class MainWindow(QtWidgets.QDialog):
 
 
     def stop_clicked(self):
-        if self.theirInterpreter.cloner is not None:
+        if hasattr(self.theirInterpreter, "cloner"):
             if self.theirInterpreter.synthetizer.ttsVoice is not None:
                 #We successfully cloned a voice. Update the voice list.
                 newVoice = f"{self.theirInterpreter.synthetizer.ttsVoice.initialName} - {self.theirInterpreter.synthetizer.ttsVoice.voiceID}"
@@ -610,8 +705,10 @@ def main():
     app.exec()
 
     try:
-        settings["your_output_language"] = dialog.your_output_lang.combo_box.currentText()
-        settings["their_output_language"] = dialog.their_output_lang.combo_box.currentText()
+        for widget in dialog.iterate_widgets(dialog.layout):
+            if hasattr(widget, 'configKey'):
+                #Read and save the config data.
+                settings[widget.configKey] = widget.get_value()
         helper.dump_settings()
     except RuntimeError:
         pass

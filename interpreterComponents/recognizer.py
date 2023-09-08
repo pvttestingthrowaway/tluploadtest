@@ -7,6 +7,8 @@ import platform
 import queue
 import sys
 import threading
+from dataclasses import dataclass
+from typing import Optional
 
 import faster_whisper
 import openai
@@ -14,18 +16,23 @@ from faster_whisper.transcribe import TranscriptionInfo
 
 from utils import helper
 
+@dataclass
+class RecognizerParams:
+    runLocal: bool
+    modelSize: Optional[str] = None
+    apiKey: Optional[str] = None
 
 class Recognizer:
-    def __init__(self, runLocal, modelSize=None, apiKey=None):
-        self.runLocal = runLocal
+    def __init__(self, params:RecognizerParams):
+        self.runLocal = params.runLocal
         self.model = None
         if self.runLocal:
             if platform.system() == "Linux" or platform.system() == "Windows":
-                self.model = faster_whisper.WhisperModel(modelSize, device="auto", compute_type="float16")
+                self.model = faster_whisper.WhisperModel(params.modelSize, device="auto", compute_type="float16")
             else:
-                self.model = faster_whisper.WhisperModel(modelSize, device="auto")
+                self.model = faster_whisper.WhisperModel(params.modelSize, device="auto")
         else:
-            openai.api_key = apiKey
+            openai.api_key = params.apiKey
 
         self.audioQueue = queue.Queue()
         self.interruptEvent = threading.Event()

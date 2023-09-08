@@ -33,6 +33,8 @@ class SetupDialog(LocalizedDialog):
         # Now add the new layout to the main gridLayout
         self.gridLayout.addLayout(hboxLayout, 99, 0, 1, 3)  # Span the QHBoxLayout across all 3 columns
 
+
+
     #This is just an edited version of configWindow's save_clicked method.
     def iterate_widgets(self, layout):
         for i in range(layout.count()):
@@ -259,12 +261,12 @@ class VoiceInput(SetupDialog):
         super().__init__("Please choose your AI voice and the placeholder voice.")
 
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        user = helper.get_xi_user(apiKey)
+        self.user = helper.get_xi_user(apiKey)
 
         self.your_ai_voice = LabeledInput(
             "Your AI Voice",
             configKey="your_ai_voice",
-            data=helper.get_list_of_voices(user),
+            data=helper.get_list_of_voices(self.user),
             info="This is the voice that will be used for your translated speech."
         )
         self.gridLayout.addWidget(self.your_ai_voice, 1, 0)
@@ -272,10 +274,24 @@ class VoiceInput(SetupDialog):
         self.placeholder_ai_voice = LabeledInput(
             "Placeholder AI Voice",
             configKey="placeholder_ai_voice",
-            data=helper.get_list_of_voices(user),
+            data=helper.get_list_of_voices(self.user),
             info="This is the voice that will be used as a placeholder while copying the other user's actual voice."
         )
         self.gridLayout.addWidget(self.placeholder_ai_voice, 1, 2)
+
+        self.your_ai_voice.combo_box.currentIndexChanged.connect(lambda: self.check_for_pvc(self.your_ai_voice.get_value()))
+        self.placeholder_ai_voice.combo_box.currentIndexChanged.connect(lambda: self.check_for_pvc(self.placeholder_ai_voice.get_value()))
+
+    def check_for_pvc(self, selected_text):
+        if "PVC" in selected_text:
+            msgBox = QtWidgets.QMessageBox()
+            baseText = helper.translate_ui_text("You have selected a PVC (Professional Voice Cloning) voice.\nFor the best quality, you should use one of the following models:")
+            models = helper.get_models_localized(self.user, settings["ui_language"])
+            suitableModels = [item.modelID for item in self.user.get_voice_by_ID(selected_text.split(" - ")[1]).get_high_quality_models()]
+            filteredModels = [item for item in models if item.split(' - ')[1] in suitableModels]
+
+            msgBox.setText(baseText + "\n• " + "\n• ".join(filteredModels))
+            msgBox.exec()
 
 class OptionalAPIInput(SetupDialog):
     def __init__(self):

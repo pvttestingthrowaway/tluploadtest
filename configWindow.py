@@ -157,11 +157,11 @@ class ConfigDialog(LocalizedDialog):
 
         self.setWindowTitle("Settings")
         apiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-        user = None
+        self.user = None
         errorMessage = None
         for i in range(3):
             try:
-                user: Optional[elevenlabslib.ElevenLabsUser] = elevenlabslib.ElevenLabsUser(apiKey)
+                self.user: Optional[elevenlabslib.ElevenLabsUser] = elevenlabslib.ElevenLabsUser(apiKey)
             except ValueError:
                 break
             except AttributeError:
@@ -235,7 +235,7 @@ class ConfigDialog(LocalizedDialog):
         self.your_ai_voice = LabeledInput(
             "Your TTS Voice",
             configKey="your_ai_voice",
-            data=helper.get_list_of_voices(user),
+            data=helper.get_list_of_voices(self.user),
             info="This is the TTS voice that will be used to speak your translated messages."
         )
         self.layout.addWidget(self.your_ai_voice, currentRow, 0)
@@ -243,10 +243,13 @@ class ConfigDialog(LocalizedDialog):
         self.placeholder_ai_voice = LabeledInput(
             "Placeholder TTS Voice",
             configKey="placeholder_ai_voice",
-            data=helper.get_list_of_voices(user),
+            data=helper.get_list_of_voices(self.user),
             info="This is the voice that will be used as a placeholder while copying the other user's actual voice."
         )
         self.layout.addWidget(self.placeholder_ai_voice, currentRow, 2)
+
+        self.your_ai_voice.combo_box.currentIndexChanged.connect(lambda: self.check_for_pvc(self.your_ai_voice.get_value()))
+        self.placeholder_ai_voice.combo_box.currentIndexChanged.connect(lambda: self.check_for_pvc(self.placeholder_ai_voice.get_value()))
 
         currentRow += 1
 
@@ -414,6 +417,16 @@ class ConfigDialog(LocalizedDialog):
         self.setLayout(self.root_layout)  # Set root_layout as the layout for the main window (ConfigDialog)
         self.fix_size()
 
+    def check_for_pvc(self, selected_text):
+        if "PVC" in selected_text:
+            msgBox = QtWidgets.QMessageBox()
+            baseText = helper.translate_ui_text("You have selected a PVC (Professional Voice Cloning) voice.\nFor the best quality, you should use one of the following models:")
+            models = helper.get_models_localized(self.user, settings["ui_language"])
+            suitableModels = [item.modelID for item in self.user.get_voice_by_ID(selected_text.split(" - ")[1]).get_high_quality_models()]
+            filteredModels = [item for item in models if item.split(' - ')[1] in suitableModels]
+
+            msgBox.setText(baseText + "\n• " + "\n• ".join(filteredModels))
+            msgBox.exec()
 
     def fix_size(self):
         # Get screen size

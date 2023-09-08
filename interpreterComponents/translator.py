@@ -1,6 +1,7 @@
 import logging
 import queue
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import googletrans
@@ -8,15 +9,17 @@ import deepl
 from PyQt6.QtCore import pyqtSignal
 
 from utils import helper
-
-
+@dataclass
+class TranslatorParams:
+    deeplAPIKey: str
+    targetLang: str
 class Translator:
-    def __init__(self, deeplAPIKey:str, targetLang:str, tlQueue:queue.Queue, ttsQueue:queue.Queue):
+    def __init__(self, params:TranslatorParams, tlQueue:queue.Queue, ttsQueue:queue.Queue):
         self.deepLTranslator:Optional[deepl.Translator] = None
         self.googleTranslator: googletrans.Translator = googletrans.Translator()
         self.interruptEvent = threading.Event()
 
-        langName, langCode = targetLang.lower().split(" - ")
+        langName, langCode = params.targetLang.lower().split(" - ")
 
         #Edge cases for deepl.
         if langCode == "en":
@@ -25,8 +28,8 @@ class Translator:
         if langCode == "pt":
             langCode = "pt-br"
 
-        if deeplAPIKey is not None and deeplAPIKey != "":
-            self.deepLTranslator = helper.get_deepl_translator(deeplAPIKey)
+        if params.deeplAPIKey is not None and params.deeplAPIKey != "":
+            self.deepLTranslator = helper.get_deepl_translator(params.deeplAPIKey)
 
         self.targetLang = None
 

@@ -8,11 +8,11 @@ from typing import Optional
 import keyring
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from interpreterComponents.cloner import Cloner
-from interpreterComponents.detector import Detector
-from interpreterComponents.recognizer import Recognizer
-from interpreterComponents.synthetizer import Synthesizer
-from interpreterComponents.translator import Translator
+from interpreterComponents.cloner import Cloner, ClonerParams
+from interpreterComponents.detector import Detector, DetectorParams
+from interpreterComponents.recognizer import Recognizer, RecognizerParams
+from interpreterComponents.synthetizer import Synthesizer, SynthesizerParams
+from interpreterComponents.translator import Translator, TranslatorParams
 from utils import helper
 
 
@@ -24,61 +24,60 @@ class Interpreter(QObject):
     wRecognizerThread:Optional[threading.Thread] = None
 
     @staticmethod
-    def init_wrecognizer(runLocal, modelSize, apiKey):
+    def init_wrecognizer(params:RecognizerParams):
         if Interpreter.wRecognizer is None:
-            if apiKey is not None or modelSize is not None:
-                Interpreter.wRecognizer = Recognizer(runLocal, modelSize, apiKey)
+            if params.apiKey is not None or params.modelSize is not None:
+                Interpreter.wRecognizer = Recognizer(params)
                 Interpreter.wRecognizerThread = threading.Thread(target=Interpreter.wRecognizer.main_loop)
 
-    def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, srSettings:tuple,createNewVoice: bool=False):
+    #def __init__(self, audioInput: str, audioOutput: str, settings: dict, targetLang: str, voiceIDOrName: str, srSettings:tuple,createNewVoice: bool=False):
+    def __init__(self, recognizerParams:RecognizerParams, detectorParams:DetectorParams, translatorParams:TranslatorParams, synthesizerParams:SynthesizerParams, clonerParams:ClonerParams=None):
         super().__init__()
         self.threads = list()
         self.interruptEvents = list()
         self._paused = threading.Event()
         self.ttsQueue = queue.Queue()
         self.tlQueue = queue.Queue()
-        self.cloneQueue = None
-        self.cloner = None
-        runLocal = settings["voice_recognition_type"] == 0
-        openAIAPIKey = keyring.get_password("polyecho", "openai_api_key")
-        deepLAPIKey = keyring.get_password("polyecho", "deepl_api_key") if settings["deepl_enabled"] else ""
-        audoApiKey = keyring.get_password("polyecho", "audo_api_key") if settings["audo_enabled"] else ""
+        self.cloneQueue = queue.Queue() if clonerParams is not None else None
+
+        self._init_detector(recognizerParams, detectorParams)
+        self._init_translator(translatorParams)
+        self._init_synthetizer(synthesizerParams, clonerParams)
 
 
-        modelSize = helper.modelSizes[settings["model_size"]]
-        if runLocal:
-            helper.logger.debug(f"Using {modelSize} for faster-whisper")
-        xiApiKey = keyring.get_password("polyecho", "elevenlabs_api_key")
-
-        placeHolderVoiceID = settings["placeholder_ai_voice"]
-        placeHolderVoiceID = placeHolderVoiceID[placeHolderVoiceID.index(" - ")+3:]
-
-        if createNewVoice:
-            voiceID = placeHolderVoiceID
-            self.cloneQueue = queue.Queue()
-            self.cloner = Cloner(cloneQueue=self.cloneQueue, xiApikey=xiApiKey, voiceName=voiceIDOrName,audoApiKey=audoApiKey)
-        else:
-            voiceID = voiceIDOrName[voiceIDOrName.index(" - ") + 3:]
-
-        self.synthetizer = Synthesizer(apiKey=xiApiKey, outputDeviceName=audioOutput, ttsQueue=self.ttsQueue, voiceID=voiceID, isPlaceHolder=createNewVoice)
+    def _init_detector(self, recognizerParams:RecognizerParams, detectorParams:DetectorParams):
+        #Initialize the recognizer...
+        if recognizerParams.runLocal:
+            helper.logger.debug(f"Using {recognizerParams.modelSize} for faster-whisper")
 
         with Interpreter.GIL:
-            Interpreter.init_wrecognizer(runLocal, modelSize, openAIAPIKey)
-
-        self.detector = Detector(inputDeviceName=audioInput,
-                                 srSettings=srSettings, tlQueue=self.tlQueue, cloneQueue=self.cloneQueue,
-                                 audioQueue=Interpreter.wRecognizer.audioQueue)
-
-        self.translator = Translator(deeplAPIKey=deepLAPIKey, targetLang=targetLang, tlQueue=self.tlQueue, ttsQueue=self.ttsQueue)
+            Interpreter.init_wrecognizer(recognizerParams)
 
 
+        # Initialize the detector...
+        #self.detector = Detector(inputDeviceName=audioInput,
+        #                         srSettings=srSettings, tlQueue=self.tlQueue, cloneQueue=self.cloneQueue,
+        #                         audioQueue=Interpreter.wRecognizer.audioQueue)
+        self.detector = Detector(detectorParams, tlQueue=self.tlQueue, audioQueue=Interpreter.wRecognizer.audioQueue, cloneQueue=self.cloneQueue)
 
         self.interruptEvents.append(self.detector.interruptEvent)
+
+    def _init_translator(self, translatorParams:TranslatorParams):
+        self.translator = Translator(translatorParams, tlQueue=self.tlQueue, ttsQueue=self.ttsQueue)
         self.interruptEvents.append(self.translator.interruptEvent)
+
+    def _init_synthetizer(self, synthesizerParams:SynthesizerParams, clonerParams:ClonerParams=None):
+        if clonerParams is not None:
+            self.__init_cloner(clonerParams)
+
+        self.synthetizer = Synthesizer(synthesizerParams, ttsQueue=self.ttsQueue)
+
         self.interruptEvents.append(self.synthetizer.interruptEvent)
 
-        if self.cloneQueue is not None:
-            self.interruptEvents.append(self.cloner.interruptEvent)
+    def __init_cloner(self, clonerParams:ClonerParams):
+        self.cloner = Cloner(clonerParams, cloneQueue=self.cloneQueue)
+        self.interruptEvents.append(self.cloner.interruptEvent)
+
 
     def begin_interpretation(self):
         helper.log_usage_info("Before begin interpretation")

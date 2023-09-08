@@ -1,35 +1,42 @@
 import logging
 import queue
 import threading
-from elevenlabslib import GenerationOptions, PlaybackOptions
+from dataclasses import dataclass
+
+from elevenlabslib import GenerationOptions, PlaybackOptions, ElevenLabsModel
 
 from utils import helper
 
-
+@dataclass
+class SynthesizerParams:
+    apiKey: str
+    outputDeviceName: str
+    voiceID: str
+    modelID: str
 class Synthesizer:
-    def __init__(self, apiKey:str, outputDeviceName, ttsQueue:queue.Queue, voiceID, isPlaceHolder=False):
+    def __init__(self, params:SynthesizerParams, ttsQueue:queue.Queue):
         self.eventQueue = queue.Queue()
         self.readyForPlaybackEvent = threading.Event()
         self.readyForPlaybackEvent.set()
-        self.user = helper.get_xi_user(apiKey)
-        self.modelName = "eleven_multilingual_v1"
+        self.user = helper.get_xi_user(params.apiKey)
 
-        modelNames = [model["name"] for model in self.user.get_available_models()]
-        for name in modelNames:
-            if "multilingual_v2" in name.lower():
-                self.modelName = name
+        if " - " in params.modelID:
+            # We need to cut out the modelID.
+            params.modelID = params.modelID[params.modelID.index(" - ") + 3:]
 
-        self.generationOptions = GenerationOptions(model_id=self.modelName, latencyOptimizationLevel=4, stability=0.5, similarity_boost=0.75)
+        self.generationOptions = GenerationOptions(model=params.modelID, latencyOptimizationLevel=4, stability=0.5, similarity_boost=0.75)
 
-        self.ttsVoice = None
 
-        if isPlaceHolder:
-            self.placeHolderVoice = self.user.get_voice_by_ID(voiceID)
-            self.placeHolderVoice.edit_settings(stability=0.65, similarity_boost=0.5)
-        else:
-            self.ttsVoice = self.user.get_voice_by_ID(voiceID)
-            self.ttsVoice.edit_settings(stability=0.65, similarity_boost=0.5)
-        self.outputDeviceInfo = helper.get_portaudio_device_info_from_name(outputDeviceName, "output")
+        if " - " in params.voiceID:
+            #We need to cut out the voiceID.
+            params.voiceID = params.voiceID[params.voiceID.index(" - ") + 3:]
+
+
+        self.ttsVoice = self.user.get_voice_by_ID(params.voiceID)
+        self.ttsVoice.edit_settings(stability=0.65, similarity_boost=0.5)
+
+
+        self.outputDeviceInfo = helper.get_portaudio_device_info_from_name(params.outputDeviceName, "output")
         self.ttsQueue = ttsQueue
         #Let's go with some fairly conservative settings. There will be little emotion.
         #Can't really risk going lower given the clones may be low quality.
@@ -38,6 +45,7 @@ class Synthesizer:
         self.isRunning.set()
 
     def set_voice(self, newVoiceID):
+        #Used by the interpreter to swap the voice to the cloned one
         self.ttsVoice = self.user.get_voice_by_ID(newVoiceID)
 
     def main_loop(self):
@@ -64,12 +72,8 @@ class Synthesizer:
         def endcallbackfunc():
             self.readyForPlaybackEvent.set()
 
-        voice = self.ttsVoice
-        if voice is None:
-            voice = self.placeHolderVoice
-
         playbackOptions = PlaybackOptions(runInBackground=True, portaudioDeviceID=self.outputDeviceInfo["index"], onPlaybackStart=startcallbackfunc, onPlaybackEnd=endcallbackfunc)
-        voice.generate_stream_audio_v2(prompt=prompt, generationOptions=self.generationOptions, playbackOptions=playbackOptions)
+        self.ttsVoice.generate_stream_audio_v2(prompt=prompt, generationOptions=self.generationOptions, playbackOptions=playbackOptions)
 
     def waitForPlaybackReady(self):
         while True:

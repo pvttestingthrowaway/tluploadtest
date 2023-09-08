@@ -5,6 +5,7 @@ import os
 import platform
 import queue
 import threading
+from dataclasses import dataclass
 from typing import Optional
 
 import faster_whisper
@@ -13,17 +14,30 @@ import openai
 
 from utils import helper
 
+
+@dataclass
+class DetectorParams:
+    inputDevice: str
+    energy_threshold: int
+    dynamic_energy_threshold: bool
+    pause_threshold: float
+    def __post_init__(self):
+        if isinstance(self.energy_threshold, str):
+            self.energy_threshold = int(self.energy_threshold)
+
+        if isinstance(self.pause_threshold, str):
+            self.pause_threshold = float(self.pause_threshold)
 class Detector:
     GDL = threading.Lock()
-    def __init__(self, tlQueue: queue.Queue, inputDeviceName:str, srSettings:tuple, audioQueue: queue.Queue, cloneQueue=None):
-        self.microphoneInfo = helper.get_portaudio_device_info_from_name(inputDeviceName, "input")
+    def __init__(self, params:DetectorParams, tlQueue:queue.Queue, audioQueue:queue.Queue, cloneQueue:Optional[queue.Queue]=None):
+        self.microphoneInfo = helper.get_portaudio_device_info_from_name(params.inputDevice, "input")
         self.srMic = sr.Microphone(device_index=self.microphoneInfo["index"], sample_rate=int(self.microphoneInfo["default_samplerate"]))
         self.srRecognizer = sr.Recognizer()
         self.srRecognizer.non_speaking_duration = 0.5
-        helper.logger.debug(f"Starting detector with settings: {srSettings}")
-        self.srRecognizer.energy_threshold = int(srSettings[0])
-        self.srRecognizer.dynamic_energy_threshold = srSettings[1]
-        self.srRecognizer.pause_threshold = float(srSettings[2])
+        helper.logger.debug(f"Starting detector with settings: {params}")
+        self.srRecognizer.energy_threshold = params.energy_threshold
+        self.srRecognizer.dynamic_energy_threshold = params.dynamic_energy_threshold
+        self.srRecognizer.pause_threshold = params.pause_threshold
 
         self.interruptEvent = threading.Event()
         self.isRunning = threading.Event()  #This one stops audio detection entirely when cleared.
@@ -31,7 +45,7 @@ class Detector:
         self.recognizerData = None
 
         self.resultQueue = tlQueue
-        self.cloneQueue:queue.Queue = cloneQueue
+        self.cloneQueue = cloneQueue
         self.audioQueue = audioQueue
 
 
